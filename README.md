@@ -90,8 +90,6 @@ Antes de começar, você precisa ter instalado:
 
 - Node.js
 - npm ou yarn
-- Oracle Client
-- Banco Oracle configurado
 
 ---
 
@@ -142,49 +140,12 @@ npm start
 
 ## 🔐 Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz do backend:
+Crie um arquivo `.env.local` na raiz do backend:
 
 ```env
-PORT=3000
-
-DB_USER=usuario
-DB_PASSWORD=senha
-DB_CONNECTION_STRING=localhost/XEPDB1
+VITE_SUPABASE_URL=URL_SUPABASE
+VITE_SUPABASE_ANON_KEY=ANON_KEY_SUPABASE
 ```
-
----
-
-## 🗄️ Configuração Oracle
-
-Este projeto utiliza Oracle Database.
-
-Caso utilize o pacote `oracledb`, instale o Oracle Instant Client.
-
-### Windows
-
-Baixe em:
-
-```txt
-https://www.oracle.com/database/technologies/instant-client.html
-```
-
-Configure a variável `PATH` apontando para a pasta do Instant Client.
-
----
-
-## 📸 Screenshots
-
-### Tela Inicial
-
-Adicione aqui screenshots reais do sistema.
-
-### Frente de Caixa
-
-Adicione aqui screenshots reais do PDV.
-
-### Gestão de Produtos
-
-Adicione aqui screenshots reais da gestão de produtos.
 
 ---
 
