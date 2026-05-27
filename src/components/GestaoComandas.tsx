@@ -24,8 +24,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
     // Estados Gestão da Comanda (Adicionar Itens)
     const [comandaAberta, setComandaAberta] = useState<Comanda | null>(null);
-    const [produtoAddId, setProdutoAddId] = useState('');
-    const [quantidadeAdd, setQuantidadeAdd] = useState<number | ''>(1);
+    const [quantidadeAdd] = useState<number | ''>(1);
 
     // Estados Checkout (Pagamento - Igual ao PDV)
     const [modalCheckout, setModalCheckout] = useState(false);
