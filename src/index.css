@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fundo padrão da aplicação */
+body {
+  @apply bg-cafe-bg text-cafe-dark;
+}
