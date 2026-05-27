@@ -1,36 +1,295 @@
-# ☕ Village Cafe - Sistema de PDV e Mini-ERP
+# ☕ Village Café PDV
 
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
+Sistema de Ponto de Venda (PDV) desenvolvido para gerenciamento de operações de cafeteria, com foco em controle de vendas, produtos, atendimento e gestão operacional.
 
-Um sistema completo de Ponto de Venda (PDV) e gestão integrada projetado para operações de cafeteria e estabelecimentos gastronômicos. Desenvolvido para transcender o caixa tradicional, unindo controle de estoque com auditoria, ficha técnica de produtos e gestão financeira avançada.
+---
 
-## 🚀 Funcionalidades Principais
+## 📌 Sobre o Projeto
 
-* **Caixa e PDV Avançado:** * Abertura e fechamento de turno com fundo de troco.
-  * Múltiplos métodos de pagamento (PIX, Dinheiro, Crédito, Débito).
-  * **Edição e Cancelamento de Vendas:** Lógica inteligente que recalcula o caixa e devolve os itens ao estoque automaticamente.
-* **Gestão de Revenda e Estoque (Audit Trail):**
-  * Histórico de movimentações (Trilha de Auditoria) imutável para segurança do inventário.
-  * Separação estrita entre insumos de cozinha (estoque base) e produtos de prateleira (revenda).
-* **Fichas Técnicas:**
-  * Produtos compostos geram baixa automática dos ingredientes base na proporção exata no momento da venda.
-* **Módulo Financeiro (Contas a Pagar):**
-  * Ao registrar a entrada de notas de fornecedores, o sistema pode automaticamente lançar provisões no módulo de Contas a Pagar, gerando um dashboard de vencimentos e controle de dívidas.
+O **Village Café PDV** é uma aplicação criada para facilitar a operação de cafeterias e pequenos estabelecimentos comerciais, oferecendo uma interface moderna, rápida e intuitiva para:
 
-## 🛠️ Tecnologias Utilizadas
+- Controle de vendas
+- Gerenciamento de produtos
+- Controle de pedidos
+- Gestão operacional
+- Fluxo de caixa
+- Atendimento no balcão
 
-* **Front-end:** React.js com Vite
-* **Linguagem:** TypeScript
-* **Estilização:** Tailwind CSS (com suporte a Dark Mode)
-* **Back-end & Banco de Dados:** Supabase (PostgreSQL)
-* **Autenticação e Segurança:** Supabase Auth com Row Level Security (RLS) rigorosamente configurado.
-* **Deploy:** Vercel
+O projeto foi desenvolvido com foco em performance, organização de código e escalabilidade.
 
-## ⚙️ Como executar localmente
+---
 
-1. Clone o repositório:
+## 🚀 Tecnologias Utilizadas
+
+### Frontend
+- React
+- Vite
+- JavaScript
+- HTML5
+- CSS3
+
+### Backend
+- Node.js
+- Express
+
+### Banco de Dados
+- Oracle Database
+
+### Outras Ferramentas
+- Git
+- GitHub
+- npm
+- ESLint
+
+---
+
+## 📂 Estrutura do Projeto
+
 ```bash
-git clone [https://github.com/SEU_USUARIO/village-cafe-pdv.git](https://github.com/SEU_USUARIO/village-cafe-pdv.git)
+village-cafe-pdv/
+├── backend/
+├── frontend/
+├── public/
+├── src/
+├── package.json
+├── vite.config.js
+└── README.md
+```
+
+---
+
+## ⚙️ Funcionalidades
+
+### 🛒 Frente de Caixa (PDV)
+- Registro de vendas
+- Adição e remoção de produtos
+- Controle de quantidade
+- Fechamento de pedido
+
+### 📦 Produtos
+- Cadastro de produtos
+- Controle de estoque
+- Categorias
+
+### 💰 Financeiro
+- Controle de caixa
+- Histórico de vendas
+- Relatórios
+
+### 👥 Usuários
+- Login e autenticação
+- Controle de permissões
+
+---
+
+## 🖥️ Instalação e Execução
+
+### Pré-requisitos
+
+Antes de começar, você precisa ter instalado:
+
+- Node.js
+- npm ou yarn
+- Oracle Client
+- Banco Oracle configurado
+
+---
+
+## 📥 Clonando o Projeto
+
+```bash
+git clone https://github.com/TiagoAbudi/village-cafe-pdv.git
+```
+
+```bash
+cd village-cafe-pdv
+```
+
+---
+
+## 📦 Instalando Dependências
+
+### Frontend
+
+```bash
+npm install
+```
+
+### Backend
+
+```bash
+cd backend
+npm install
+```
+
+---
+
+## ▶️ Executando o Projeto
+
+### Frontend
+
+```bash
+npm run dev
+```
+
+### Backend
+
+```bash
+npm start
+```
+
+---
+
+## 🔐 Variáveis de Ambiente
+
+Crie um arquivo `.env` na raiz do backend:
+
+```env
+PORT=3000
+
+DB_USER=usuario
+DB_PASSWORD=senha
+DB_CONNECTION_STRING=localhost/XEPDB1
+```
+
+---
+
+## 🗄️ Configuração Oracle
+
+Este projeto utiliza Oracle Database.
+
+Caso utilize o pacote `oracledb`, instale o Oracle Instant Client.
+
+### Windows
+
+Baixe em:
+
+```txt
+https://www.oracle.com/database/technologies/instant-client.html
+```
+
+Configure a variável `PATH` apontando para a pasta do Instant Client.
+
+---
+
+## 📸 Screenshots
+
+### Tela Inicial
+
+Adicione aqui screenshots reais do sistema.
+
+### Frente de Caixa
+
+Adicione aqui screenshots reais do PDV.
+
+### Gestão de Produtos
+
+Adicione aqui screenshots reais da gestão de produtos.
+
+---
+
+## 📋 Scripts Disponíveis
+
+### Desenvolvimento
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+### Preview
+
+```bash
+npm run preview
+```
+
+---
+
+## 🧪 Melhorias Futuras
+
+- Emissão de cupom fiscal
+- Dashboard administrativo
+- Relatórios avançados
+- Integração com impressora térmica
+- Controle de comandas
+- Integração com APIs de pagamento
+- Multiempresa
+
+---
+
+## 🤝 Contribuição
+
+Contribuições são bem-vindas!
+
+### 1. Faça um Fork do projeto
+
+### 2. Crie uma branch
+
+```bash
+git checkout -b feature/minha-feature
+```
+
+### 3. Commit suas alterações
+
+```bash
+git commit -m "Minha nova feature"
+```
+
+### 4. Faça push para o repositório
+
+```bash
+git push origin feature/minha-feature
+```
+
+### 5. Abra um Pull Request
+
+---
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT.
+
+---
+
+## 👨‍💻 Autor
+
+Desenvolvido por **Tiago Abudi**
+
+### GitHub
+
+```txt
+https://github.com/TiagoAbudi
+```
+
+---
+
+## ⭐ Apoie o Projeto
+
+Se este projeto foi útil para você:
+
+- ⭐ Dê uma estrela no repositório
+- 🛠️ Contribua com melhorias
+- 📢 Compartilhe o projeto
+
+---
+
+## 📞 Contato
+
+### LinkedIn
+
+```txt
+linkedin.com/in/tiago-abudi-12502b22b
+```
+
+### Email
+
+```txt
+tiagoabudi96@gmail.com
+```
+
+---
