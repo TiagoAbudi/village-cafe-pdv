@@ -11,8 +11,9 @@ import PDVModulo from './components/PDVModulo';
 import Login from './components/Login';
 import DashboardModulo from './components/DashboardModulo';
 import ContasPagarModulo from './components/ContasPagarModulo';
+import GestaoComandas from './components/GestaoComandas';
 
-type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro';
+type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro' | 'comandas';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -55,6 +56,7 @@ function App() {
 
           <nav className="flex items-center gap-1 bg-cafe-dark/40 p-1 rounded-lg w-full sm:w-auto overflow-x-auto text-sm">
             <button onClick={() => setAbaAtiva('pdv')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'pdv' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>PDV Caixa</button>
+            <button onClick={() => setAbaAtiva('comandas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'comandas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Comandas</button>
             <button onClick={() => setAbaAtiva('dashboard')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'dashboard' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Dashboard</button>
             <button onClick={() => setAbaAtiva('precificacao')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'precificacao' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Fichas</button>
             <button onClick={() => setAbaAtiva('revenda')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'revenda' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Revenda</button>
@@ -78,6 +80,7 @@ function App() {
         {abaAtiva === 'revenda' && <CadastroRevenda atendente={atendenteNome} />}
         {abaAtiva === 'entradas' && <EntradasCompras atendente={atendenteNome} />}
         {abaAtiva === 'financeiro' && <ContasPagarModulo />}
+        {abaAtiva === 'comandas' && <GestaoComandas atendente={atendenteNome} />}
       </main>
     </div>
   );
