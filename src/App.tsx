@@ -12,8 +12,10 @@ import Login from './components/Login';
 import DashboardModulo from './components/DashboardModulo';
 import ContasPagarModulo from './components/ContasPagarModulo';
 import GestaoComandas from './components/GestaoComandas';
+import DashboardRendimentos from './components/DashboardRendimentos';
+import AlertasGlobaisProvider from './components/AlertasGlobaisProvider';
 
-type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro' | 'comandas';
+type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro' | 'comandas' | 'rendimentos';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -46,6 +48,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-cafe-bg text-cafe-dark font-sans flex flex-col">
+      <AlertasGlobaisProvider />
       <header className="bg-cafe-primary text-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-4">
 
@@ -62,6 +65,7 @@ function App() {
             <button onClick={() => setAbaAtiva('revenda')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'revenda' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Revenda</button>
             <button onClick={() => setAbaAtiva('entradas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'entradas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Estoque</button>
             <button onClick={() => setAbaAtiva('financeiro')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'financeiro' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Financeiro</button>
+            <button onClick={() => setAbaAtiva('rendimentos')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'rendimentos' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Rendimentos</button>
           </nav>
 
           {/* ATUALIZADO: Mostra um alô para o atendente logado ao lado do botão Sair */}
@@ -81,6 +85,7 @@ function App() {
         {abaAtiva === 'entradas' && <EntradasCompras atendente={atendenteNome} />}
         {abaAtiva === 'financeiro' && <ContasPagarModulo />}
         {abaAtiva === 'comandas' && <GestaoComandas atendente={atendenteNome} />}
+        {abaAtiva === 'rendimentos' && <DashboardRendimentos />}
       </main>
     </div>
   );

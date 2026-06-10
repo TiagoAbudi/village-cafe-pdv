@@ -26,6 +26,14 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
   const [caixaAberto, setCaixaAberto] = useState<boolean | null>(null);
   const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
 
+  const [buscaProduto, setBuscaProduto] = useState('');
+
+  const produtosFiltrados = useMemo(() => {
+    return produtos.filter(p =>
+      p.nome.toLowerCase().includes(buscaProduto.toLowerCase())
+    );
+  }, [produtos, buscaProduto]);
+
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
     setFeedback({ msg, tipo });
     setTimeout(() => setFeedback({ msg: '', tipo: null }), 3000);
@@ -161,8 +169,92 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
       <div className="flex-1 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 p-4 flex flex-col">
         <h2 className="text-xl font-bold text-cafe-primary mb-4 border-b pb-2">Menu de Produtos</h2>
+
         <div className="overflow-y-auto flex-1 pr-2">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="🔍 Buscar produto..."
+              value={buscaProduto}
+              onChange={(e) => setBuscaProduto(e.target.value)}
+              className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-cafe-primary"
+            />
+          </div>
+          <div className="space-y-2 overflow-y-auto">
+            {produtosFiltrados.map(produto => {
+              const semEstoque =
+                !produto.is_receita &&
+                produto.quantidade_estoque <= 0;
+
+              const estoqueBaixo =
+                !produto.is_receita &&
+                produto.quantidade_estoque > 0 &&
+                produto.quantidade_estoque <= 5;
+
+              return (
+                <div
+                  key={produto.id}
+                  className="
+          bg-white
+          border
+          rounded-lg
+          p-3
+          flex
+          justify-between
+          items-center
+          hover:shadow-md
+          transition
+        "
+                >
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold truncate">
+                      {produto.nome}
+                    </h3>
+
+                    <div className="flex gap-3 mt-1 text-sm">
+                      <span className="font-bold text-cafe-primary">
+                        {formatarMoeda(produto.preco_venda)}
+                      </span>
+
+                      {!produto.is_receita && (
+                        <span
+                          className={
+                            semEstoque
+                              ? "text-red-500"
+                              : estoqueBaixo
+                                ? "text-yellow-600"
+                                : "text-green-600"
+                          }
+                        >
+                          Estoque: {produto.quantidade_estoque}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => adicionarAoCarrinho(produto)}
+                    disabled={semEstoque}
+                    className={`
+            ml-3
+            w-10
+            h-10
+            rounded-full
+            font-bold
+            text-xl
+            ${semEstoque
+                        ? 'bg-gray-200 text-gray-400'
+                        : 'bg-cafe-primary text-white'
+                      }
+          `}
+                  >
+                    +
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {/* <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {produtos.map(produto => {
               const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
               return (
@@ -181,7 +273,7 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
                 </button>
               );
             })}
-          </div>
+          </div> */}
         </div>
       </div>
 

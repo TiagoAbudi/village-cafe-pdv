@@ -36,6 +36,16 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
     ]);
     const [confirmacao, setConfirmacao] = useState<{ visivel: boolean; titulo: string; msg: string; onConfirm: () => void } | null>(null);
 
+    const [buscaProduto, setBuscaProduto] = useState('');
+
+    const produtosFiltrados = useMemo(() => {
+        return produtos.filter(produto =>
+            produto.nome
+                .toLowerCase()
+                .includes(buscaProduto.toLowerCase())
+        );
+    }, [produtos, buscaProduto]);
+
     const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
         setFeedback({ msg, tipo });
         setTimeout(() => setFeedback({ msg: '', tipo: null }), 4000);
@@ -126,6 +136,45 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             if (comandaAtualizada) setComandaAberta(comandaAtualizada as unknown as Comanda);
             carregarDados(true);
         } catch (error) { mostrarMensagem('Erro ao remover item.', 'erro'); }
+    };
+
+    const alterarQuantidadeItem = async (
+        itemId: string,
+        quantidadeAtual: number,
+        delta: number
+    ) => {
+        try {
+            const novaQuantidade = quantidadeAtual + delta;
+
+            if (novaQuantidade <= 0) {
+                await supabase
+                    .from('itens_comanda')
+                    .delete()
+                    .eq('id', itemId);
+            } else {
+                await supabase
+                    .from('itens_comanda')
+                    .update({
+                        quantidade: novaQuantidade
+                    })
+                    .eq('id', itemId);
+            }
+
+            const { data: comandaAtualizada } = await supabase
+                .from('comandas')
+                .select('*, itens_comanda(*, produtos(nome))')
+                .eq('id', comandaAberta?.id)
+                .single();
+
+            if (comandaAtualizada) {
+                setComandaAberta(comandaAtualizada as unknown as Comanda);
+            }
+
+            carregarDados(true);
+
+        } catch (error) {
+            mostrarMensagem('Erro ao alterar quantidade.', 'erro');
+        }
     };
 
     // ---------- FUNÇÕES DE CHECKOUT ----------
@@ -280,7 +329,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             {/* Modal Gestão da Comanda (Adicionar Itens) */}
             {comandaAberta && !modalCheckout && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+                    <div className="bg-white rounded-lg shadow-2xl p-4 md:p-6 w-full max-w-4xl h-[95vh] flex flex-col">
                         <div className="flex justify-between items-center mb-4 border-b pb-3">
                             <div>
                                 <h3 className="text-2xl font-black text-cafe-primary">{comandaAberta.identificacao}</h3>
@@ -290,39 +339,215 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                         </div>
 
                         <div className="mb-6">
-                            <label className="block text-sm font-semibold mb-2 text-gray-700">Selecione o produto:</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-60 overflow-y-auto p-2 border rounded bg-gray-50">
-                                {produtos.map(produto => {
-                                    const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
+
+                            <input
+                                type="text"
+                                placeholder="🔍 Buscar produto..."
+                                value={buscaProduto}
+                                onChange={(e) => setBuscaProduto(e.target.value)}
+                                className="
+            w-full
+            p-3
+            border
+            rounded-lg
+            mb-3
+            outline-none
+            focus:ring-2
+            focus:ring-cafe-primary
+        "
+                            />
+
+                            <div className="space-y-2 max-h-[320px] overflow-y-auto">
+
+                                {produtosFiltrados.map(produto => {
+
+                                    const semEstoque =
+                                        !produto.is_receita &&
+                                        produto.quantidade_estoque <= 0;
+
+                                    const estoqueBaixo =
+                                        !produto.is_receita &&
+                                        produto.quantidade_estoque > 0 &&
+                                        produto.quantidade_estoque <= 5;
+
                                     return (
-                                        <button
+                                        <div
                                             key={produto.id}
-                                            onClick={() => adicionarItem(produto)}
-                                            disabled={semEstoque}
-                                            className={`p-2 rounded border text-xs font-bold transition-all ${semEstoque
-                                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                                    : 'bg-white hover:border-cafe-primary hover:shadow-sm active:scale-95 border-gray-200'
-                                                }`}
+                                            className="
+                        bg-white
+                        border
+                        rounded-lg
+                        p-3
+                        flex
+                        items-center
+                        justify-between
+                        hover:shadow-sm
+                        transition
+                    "
                                         >
-                                            {produto.nome}
-                                            <span className="block text-cafe-primary mt-1">{formatarMoeda(produto.preco_venda)}</span>
-                                        </button>
+                                            <div className="flex-1 min-w-0">
+
+                                                <h4 className="font-semibold truncate text-sm">
+                                                    {produto.nome}
+                                                </h4>
+
+                                                <div className="flex flex-wrap items-center gap-2 mt-1">
+
+                                                    <span className="font-bold text-cafe-primary text-sm">
+                                                        {formatarMoeda(produto.preco_venda)}
+                                                    </span>
+
+                                                    {!produto.is_receita && (
+                                                        <>
+                                                            {semEstoque && (
+                                                                <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold">
+                                                                    🔴 Sem estoque
+                                                                </span>
+                                                            )}
+
+                                                            {estoqueBaixo && (
+                                                                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">
+                                                                    🟡 {produto.quantidade_estoque} un
+                                                                </span>
+                                                            )}
+
+                                                            {!semEstoque && !estoqueBaixo && (
+                                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
+                                                                    🟢 {produto.quantidade_estoque} un
+                                                                </span>
+                                                            )}
+                                                        </>
+                                                    )}
+
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                onClick={() => adicionarItem(produto)}
+                                                disabled={semEstoque}
+                                                className={`
+                            ml-3
+                            w-10
+                            h-10
+                            rounded-full
+                            font-bold
+                            text-xl
+                            flex
+                            items-center
+                            justify-center
+                            transition
+                            ${semEstoque
+                                                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                        : 'bg-cafe-primary text-white hover:opacity-90 active:scale-95'
+                                                    }
+                        `}
+                                            >
+                                                +
+                                            </button>
+                                        </div>
                                     );
                                 })}
+
                             </div>
+
                         </div>
 
                         <div className="flex-1 overflow-y-auto mb-4 border rounded p-2 bg-gray-50 min-h-[200px]">
                             {comandaAberta.itens_comanda.length === 0 ? (
                                 <p className="text-center text-gray-400 italic mt-10">Nenhum item lançado ainda.</p>
                             ) : (
-                                <ul className="space-y-2">
+                                <ul className="space-y-3">
                                     {comandaAberta.itens_comanda.map(item => (
-                                        <li key={item.id} className="bg-white p-2 border rounded shadow-sm flex justify-between items-center text-sm">
-                                            <div><span className="font-bold">{item.quantidade}x</span> {item.produtos?.nome} <span className="text-gray-500 text-xs ml-1">({formatarMoeda(item.preco_unitario)})</span></div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="font-black text-cafe-dark">{formatarMoeda(item.quantidade * item.preco_unitario)}</span>
-                                                <button onClick={() => removerItem(item.id)} className="text-red-500 font-bold hover:bg-red-50 px-2 rounded">x</button>
+                                        <li
+                                            key={item.id}
+                                            className="
+        bg-white
+        border
+        rounded-lg
+        p-3
+        shadow-sm
+        flex
+        justify-between
+        items-center
+    "
+                                        >
+                                            <div className="flex-1">
+
+                                                <div className="font-semibold">
+                                                    {item.produtos?.nome}
+                                                </div>
+
+                                                <div className="text-xs text-gray-500">
+                                                    {formatarMoeda(item.preco_unitario)} cada
+                                                </div>
+
+                                            </div>
+
+                                            <div className="flex items-center gap-3">
+
+                                                <button
+                                                    onClick={() =>
+                                                        alterarQuantidadeItem(
+                                                            item.id,
+                                                            item.quantidade,
+                                                            -1
+                                                        )
+                                                    }
+                                                    className="
+                w-8
+                h-8
+                rounded-full
+                bg-gray-100
+                hover:bg-gray-200
+                font-bold
+            "
+                                                >
+                                                    -
+                                                </button>
+
+                                                <span className="font-bold w-6 text-center">
+                                                    {item.quantidade}
+                                                </span>
+
+                                                <button
+                                                    onClick={() =>
+                                                        alterarQuantidadeItem(
+                                                            item.id,
+                                                            item.quantidade,
+                                                            1
+                                                        )
+                                                    }
+                                                    className="
+                w-8
+                h-8
+                rounded-full
+                bg-cafe-primary
+                text-white
+                hover:opacity-90
+                font-bold
+            "
+                                                >
+                                                    +
+                                                </button>
+
+                                                <div className="w-24 text-right font-black">
+                                                    {formatarMoeda(
+                                                        item.quantidade *
+                                                        item.preco_unitario
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    onClick={() => removerItem(item.id)}
+                                                    className="
+                text-red-500
+                hover:text-red-700
+                font-bold
+            "
+                                                >
+                                                    🗑️
+                                                </button>
+
                                             </div>
                                         </li>
                                     ))}
