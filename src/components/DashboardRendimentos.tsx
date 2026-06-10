@@ -148,7 +148,7 @@ export default function DashboardRendimentos() {
             .slice(0, 5);
 
         const graficoDados = Object.keys(vendasPorDia).sort().map(dia => {
-            const [ano, mes, d] = dia.split('-');
+            const [, mes, d] = dia.split('-');
             return {
                 dataCurta: `${d}/${mes}`,
                 valor: vendasPorDia[dia].valor,
