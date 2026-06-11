@@ -170,31 +170,33 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
       <div className="flex-1 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 p-4 flex flex-col">
         <h2 className="text-xl font-bold text-cafe-primary mb-4 border-b pb-2">Menu de Produtos</h2>
 
-        <div className="overflow-y-auto flex-1 pr-2">
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="🔍 Buscar produto..."
-              value={buscaProduto}
-              onChange={(e) => setBuscaProduto(e.target.value)}
-              className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-cafe-primary"
-            />
-          </div>
-          <div className="space-y-2 overflow-y-auto">
-            {produtosFiltrados.map(produto => {
-              const semEstoque =
-                !produto.is_receita &&
-                produto.quantidade_estoque <= 0;
+        {/* BARRA DE BUSCA FIXA */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="🔍 Buscar produto..."
+            value={buscaProduto}
+            onChange={(e) => setBuscaProduto(e.target.value)}
+            className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-cafe-primary outline-none"
+          />
+        </div>
 
-              const estoqueBaixo =
-                !produto.is_receita &&
-                produto.quantidade_estoque > 0 &&
-                produto.quantidade_estoque <= 5;
+        {/* LISTA DE PRODUTOS COM SCROLL E ALTURA FIXA */}
+        <div className="space-y-2 overflow-auto h-[580px] pr-2">
+          {produtosFiltrados.map(produto => {
+            const semEstoque =
+              !produto.is_receita &&
+              produto.quantidade_estoque <= 0;
 
-              return (
-                <div
-                  key={produto.id}
-                  className="
+            const estoqueBaixo =
+              !produto.is_receita &&
+              produto.quantidade_estoque > 0 &&
+              produto.quantidade_estoque <= 5;
+
+            return (
+              <div
+                key={produto.id}
+                className="
           bg-white
           border
           rounded-lg
@@ -205,37 +207,37 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
           hover:shadow-md
           transition
         "
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate">
-                      {produto.nome}
-                    </h3>
+              >
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold truncate">
+                    {produto.nome}
+                  </h3>
 
-                    <div className="flex gap-3 mt-1 text-sm">
-                      <span className="font-bold text-cafe-primary">
-                        {formatarMoeda(produto.preco_venda)}
+                  <div className="flex gap-3 mt-1 text-sm">
+                    <span className="font-bold text-cafe-primary">
+                      {formatarMoeda(produto.preco_venda)}
+                    </span>
+
+                    {!produto.is_receita && (
+                      <span
+                        className={
+                          semEstoque
+                            ? "text-red-500"
+                            : estoqueBaixo
+                              ? "text-yellow-600"
+                              : "text-green-600"
+                        }
+                      >
+                        Estoque: {produto.quantidade_estoque}
                       </span>
-
-                      {!produto.is_receita && (
-                        <span
-                          className={
-                            semEstoque
-                              ? "text-red-500"
-                              : estoqueBaixo
-                                ? "text-yellow-600"
-                                : "text-green-600"
-                          }
-                        >
-                          Estoque: {produto.quantidade_estoque}
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
+                </div>
 
-                  <button
-                    onClick={() => adicionarAoCarrinho(produto)}
-                    disabled={semEstoque}
-                    className={`
+                <button
+                  onClick={() => adicionarAoCarrinho(produto)}
+                  disabled={semEstoque}
+                  className={`
             ml-3
             w-10
             h-10
@@ -243,37 +245,16 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
             font-bold
             text-xl
             ${semEstoque
-                        ? 'bg-gray-200 text-gray-400'
-                        : 'bg-cafe-primary text-white'
-                      }
+                      ? 'bg-gray-200 text-gray-400'
+                      : 'bg-cafe-primary text-white'
+                    }
           `}
-                  >
-                    +
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {/* <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {produtos.map(produto => {
-              const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
-              return (
-                <button
-                  key={produto.id} onClick={() => adicionarAoCarrinho(produto)} disabled={semEstoque}
-                  className={`relative rounded-lg p-3 flex flex-col items-center justify-center text-center transition-all h-28 border ${semEstoque ? 'bg-gray-100 border-red-200 cursor-not-allowed opacity-60' : 'bg-white shadow-sm border-gray-200 hover:border-cafe-primary hover:shadow-md active:scale-95'
-                    }`}
                 >
-                  <span className={`font-semibold text-sm mb-2 line-clamp-2 ${semEstoque ? 'text-gray-500' : 'text-cafe-dark'}`}>{produto.nome}</span>
-                  <span className={`font-bold ${semEstoque ? 'text-gray-400' : 'text-cafe-primary'}`}>{formatarMoeda(produto.preco_venda)}</span>
-                  {!produto.is_receita && (
-                    <div className="absolute top-1 right-1 text-[10px] font-bold">
-                      {semEstoque ? <span className="bg-red-500 text-white px-1.5 py-0.5 rounded">Esgotado</span> : <span className="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">{produto.quantidade_estoque} un</span>}
-                    </div>
-                  )}
+                  +
                 </button>
-              );
-            })}
-          </div> */}
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -52,6 +52,14 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const [fornecedorParaEditar, setFornecedorParaEditar] = useState<Fornecedor | null>(null);
   const [nomeFornecedorEditado, setNomeFornecedorEditado] = useState('');
 
+  // Novo estado para o campo de busca de ingredientes
+  const [termoBuscaIngrediente, setTermoBuscaIngrediente] = useState('');
+
+  // Lógica de filtro para a tabela de ingredientes
+  const ingredientesFiltrados = ingredientes.filter(ing =>
+    ing.nome.toLowerCase().includes(termoBuscaIngrediente.toLowerCase())
+  );
+
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
     setFeedback({ msg, tipo });
     setTimeout(() => setFeedback({ msg: '', tipo: null }), 4000);
@@ -278,22 +286,48 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
 
           <div>
             <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-3">Fornecedores</h3>
-            <div className="bg-white rounded-lg border overflow-hidden shadow-sm overflow-x-auto max-h-48">
-              <table className="w-full text-left border-collapse text-sm"><thead className="bg-cafe-bg border-b"><tr><th className="p-3 font-semibold text-cafe-primary">Nome</th><th className="p-3 font-semibold text-center text-cafe-primary">Ações</th></tr></thead>
-                <tbody>{fornecedores.map(f => (<tr key={f.id} className="border-b hover:bg-gray-50"><td className="p-3">{f.nome}</td><td className="p-3 text-center space-x-3"><button onClick={() => { setFornecedorParaEditar(f); setNomeFornecedorEditado(f.nome); }} className="text-blue-600 hover:underline">Editar</button><button onClick={() => setFornecedorParaApagar(f)} className="text-red-500 font-bold">x</button></td></tr>))}</tbody></table>
+            <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[193px]">
+              <table className="w-full text-left border-collapse text-sm relative">
+                <thead className="bg-cafe-bg border-b sticky top-0">
+                  <tr>
+                    <th className="p-3 font-semibold text-cafe-primary">Nome</th>
+                    <th className="p-3 font-semibold text-center text-cafe-primary">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fornecedores.map(f => (
+                    <tr key={f.id} className="border-b hover:bg-gray-50">
+                      <td className="p-3">{f.nome}</td>
+                      <td className="p-3 text-center space-x-3">
+                        <button onClick={() => { setFornecedorParaEditar(f); setNomeFornecedorEditado(f.nome); }} className="text-blue-600 hover:underline">Editar</button>
+                        <button onClick={() => setFornecedorParaApagar(f)} className="text-red-500 font-bold text-lg px-2">x</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
         <div>
-          <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Inventário (Ingredientes Base)</h3>
-          <div className="bg-white rounded-lg border overflow-hidden shadow-sm overflow-x-auto h-full max-h-[700px]">
-            <table className="w-full text-left border-collapse min-w-max text-sm">
+          <div className="flex justify-between items-center border-b pb-2 mb-4">
+            <h3 className="font-semibold text-cafe-dark text-lg">Inventário (Ingredientes Base)</h3>
+            <input
+              type="text"
+              placeholder="Buscar ingrediente..."
+              className="p-2 border border-gray-300 rounded outline-none text-sm w-full max-w-[200px] focus:border-cafe-primary transition-colors"
+              value={termoBuscaIngrediente}
+              onChange={(e) => setTermoBuscaIngrediente(e.target.value)}
+            />
+          </div>
+          <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[580px]">
+            <table className="w-full text-left border-collapse min-w-max text-sm relative">
               <thead className="bg-cafe-bg border-b sticky top-0">
                 <tr><th className="p-3 font-semibold text-cafe-primary">Ingrediente</th><th className="p-3 font-semibold text-cafe-primary">Estoque</th><th className="p-3 font-semibold text-cafe-primary">Custo</th><th className="p-3 font-semibold text-center text-cafe-primary">Ação</th></tr>
               </thead>
               <tbody>
-                {ingredientes.map(ing => (
+                {ingredientesFiltrados.map(ing => (
                   <tr key={ing.id} className="border-b hover:bg-gray-50">
                     <td className="p-3 font-medium">{ing.nome}</td>
                     <td className="p-3"><span className="font-semibold">{ing.quantidade_estoque || 0}</span> <span className="text-xs text-gray-500">{ing.unidade_medida}</span>
@@ -303,6 +337,13 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                     <td className="p-3 text-center"><button onClick={() => setIngredienteParaApagar(ing.id)} className="text-red-500 font-bold px-2 text-lg">x</button></td>
                   </tr>
                 ))}
+                {ingredientesFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-gray-500 italic">
+                      {ingredientes.length === 0 ? 'Nenhum ingrediente cadastrado.' : 'Nenhum ingrediente encontrado na busca.'}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -350,8 +391,8 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
 
         <div className="lg:col-span-2">
           <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Histórico de Movimentações (Últimos 30)</h3>
-          <div className="bg-white rounded-lg border overflow-hidden shadow-sm overflow-x-auto max-h-96">
-            <table className="w-full text-left border-collapse text-sm">
+          <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[400px]">
+            <table className="w-full text-left border-collapse text-sm relative">
               <thead className="bg-cafe-bg border-b sticky top-0">
                 <tr>
                   <th className="p-3 font-semibold text-cafe-primary">Data/Hora</th>

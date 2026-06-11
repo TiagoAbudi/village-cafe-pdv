@@ -207,9 +207,9 @@ export default function ContasPagarModulo() {
 
                     <div>
                         <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Contas Pendentes</h3>
-                        <div className="bg-white rounded-lg border overflow-hidden shadow-sm overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-max text-sm">
-                                <thead className="bg-cafe-bg border-b">
+                        <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[250px]">
+                            <table className="w-full text-left border-collapse min-w-max text-sm relative">
+                                <thead className="bg-cafe-bg border-b sticky top-0 z-10">
                                     <tr><th className="p-3 font-semibold text-cafe-primary">Vencimento</th><th className="p-3 font-semibold text-cafe-primary">Descrição</th><th className="p-3 font-semibold text-cafe-primary text-right">Valor</th><th className="p-3 font-semibold text-center text-cafe-primary">Ações</th></tr>
                                 </thead>
                                 <tbody>
@@ -232,9 +232,9 @@ export default function ContasPagarModulo() {
 
                     <div>
                         <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Histórico de Pagamentos</h3>
-                        <div className="bg-white rounded-lg border overflow-hidden shadow-sm overflow-x-auto max-h-64">
-                            <table className="w-full text-left border-collapse min-w-max text-sm">
-                                <thead className="bg-gray-100 border-b">
+                        <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[250px]">
+                            <table className="w-full text-left border-collapse min-w-max text-sm relative">
+                                <thead className="bg-gray-100 border-b sticky top-0 z-10">
                                     <tr><th className="p-3 font-semibold text-gray-600">Pago em</th><th className="p-3 font-semibold text-gray-600">Descrição</th><th className="p-3 font-semibold text-gray-600 text-right">Valor</th><th className="p-3 font-semibold text-center text-gray-600">Estornar</th></tr>
                                 </thead>
                                 <tbody>

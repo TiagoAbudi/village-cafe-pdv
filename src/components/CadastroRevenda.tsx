@@ -48,6 +48,14 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [editTamanho, setEditTamanho] = useState<number | ''>('');
   const [editUnidadeMedida, setEditUnidadeMedida] = useState('un');
 
+  // Estado para o campo de busca
+  const [termoBusca, setTermoBusca] = useState('');
+
+  // Lógica de filtro para a tabela
+  const produtosFiltrados = produtos.filter(produto =>
+    produto.nome.toLowerCase().includes(termoBusca.toLowerCase())
+  );
+
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
     setFeedback({ msg, tipo });
     setTimeout(() => setFeedback({ msg: '', tipo: null }), 3000);
@@ -338,10 +346,20 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         </div>
 
         {/* Lista de Produtos Ativos */}
+        {/* Lista de Produtos Ativos */}
         <div className="lg:col-span-2">
-          <h3 className="font-semibold mb-3">Produtos Ativos</h3>
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto h-full max-h-[500px]">
-            <table className="w-full text-left border-collapse min-w-max">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-semibold">Produtos Ativos</h3>
+            <input
+              type="text"
+              placeholder="Buscar produto..."
+              className="p-2 border border-gray-300 rounded outline-none text-sm w-full max-w-xs focus:border-cafe-primary transition-colors"
+              value={termoBusca}
+              onChange={(e) => setTermoBusca(e.target.value)}
+            />
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-auto h-[420px]">
+            <table className="w-full text-left border-collapse min-w-max relative">
               <thead className="bg-cafe-bg border-b sticky top-0">
                 <tr className="text-sm">
                   <th className="p-3 font-semibold text-cafe-primary">Produto</th>
@@ -351,7 +369,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                 </tr>
               </thead>
               <tbody>
-                {produtos.map(p => (
+                {produtosFiltrados.map(p => (
                   <tr key={p.id} className="border-b text-sm hover:bg-gray-50 transition-colors">
                     <td className="p-3 font-medium text-cafe-dark">{p.nome} {p.tamanho ? <span className="text-xs text-gray-500 font-normal">({p.tamanho} {p.unidade_medida})</span> : <span className="text-xs text-gray-400 font-normal">({p.unidade_medida})</span>}</td>
                     <td className="p-3">
@@ -367,7 +385,13 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                     </td>
                   </tr>
                 ))}
-                {produtos.length === 0 && (<tr><td colSpan={4} className="p-4 text-center text-gray-500 italic">Nenhum produto cadastrado.</td></tr>)}
+                {produtosFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-gray-500 italic">
+                      {produtos.length === 0 ? 'Nenhum produto cadastrado.' : 'Nenhum produto encontrado na busca.'}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -376,8 +400,8 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
       <div className="pt-8 border-t border-cafe-secondary/40">
         <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Histórico de Movimentações (Revenda)</h3>
-        <div className="bg-white rounded-lg border overflow-hidden shadow-sm overflow-x-auto max-h-96">
-          <table className="w-full text-left border-collapse text-sm">
+        <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[400px]">
+          <table className="w-full text-left border-collapse text-sm relative">
             <thead className="bg-cafe-bg border-b sticky top-0">
               <tr>
                 <th className="p-3 font-semibold text-cafe-primary">Data/Hora</th>
