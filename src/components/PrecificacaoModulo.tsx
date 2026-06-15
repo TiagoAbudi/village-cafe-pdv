@@ -12,7 +12,6 @@ type IngredienteReceita = ProdutoDB & {
     quantidade_utilizada: number;
 };
 
-// NOVO: Tipo para as fichas cadastradas
 type FichaCadastrada = {
     id: string;
     produto_venda_id: string;
@@ -37,8 +36,9 @@ export default function PrecificacaoModulo() {
     // Estados de Inserção de Ingrediente
     const [ingredienteAtualId, setIngredienteAtualId] = useState('');
     const [quantidadeAtual, setQuantidadeAtual] = useState<number | ''>('');
+    const [unidadeAtualEntrada, setUnidadeAtualEntrada] = useState('g'); // NOVO: Estado para a unidade selecionada no input
 
-    // NOVO: Estados de Edição e Exclusão
+    // Estados de Edição e Exclusão
     const [fichaEmEdicaoId, setFichaEmEdicaoId] = useState<string | null>(null);
     const [produtoEmEdicaoId, setProdutoEmEdicaoId] = useState<string | null>(null);
     const [fichaParaApagar, setFichaParaApagar] = useState<FichaCadastrada | null>(null);
@@ -53,23 +53,20 @@ export default function PrecificacaoModulo() {
 
     // 1. Carregar Dados Iniciais
     const carregarDados = async () => {
-        // Carrega Ingredientes
         const { data: ingData } = await supabase.from('produtos').select('*').eq('tipo', 'ingrediente').order('nome');
         if (ingData) {
             setIngredientesDisponiveis(ingData);
             if (ingData.length > 0 && !ingredienteAtualId) setIngredienteAtualId(ingData[0].id);
         }
 
-        // Carrega Fichas e mapeia o nome do produto final
         const { data: fichasData } = await supabase.from('fichas_tecnicas').select('*');
         const { data: produtosVendaData } = await supabase.from('produtos').select('id, nome').eq('tipo', 'venda');
-        
+
         if (fichasData && produtosVendaData) {
             const fichasCompletas = fichasData.map(ficha => {
                 const produtoRelacionado = produtosVendaData.find(p => p.id === ficha.produto_venda_id);
                 return { ...ficha, nome_produto: produtoRelacionado?.nome || 'Produto Desconhecido' };
             });
-            // Ordenar alfabeticamente
             fichasCompletas.sort((a, b) => (a.nome_produto || '').localeCompare(b.nome_produto || ''));
             setFichasCadastradas(fichasCompletas);
         }
@@ -79,8 +76,37 @@ export default function PrecificacaoModulo() {
         carregarDados();
     }, []);
 
+    // NOVO: Atualiza automaticamente a unidade de medida de entrada sugerida ao mudar o ingrediente no select
+    useEffect(() => {
+        const produtoBase = ingredientesDisponiveis.find(p => p.id === ingredienteAtualId);
+        if (produtoBase) {
+            const uniBase = produtoBase.unidade_medida.toLowerCase();
+            if (uniBase === 'kg') setUnidadeAtualEntrada('g'); // Se cadastrado em kg, sugere g
+            else if (uniBase === 'l') setUnidadeAtualEntrada('ml'); // Se cadastrado em l, sugere ml
+            else setUnidadeAtualEntrada(produtoBase.unidade_medida); // Caso contrário (un, etc), mantém a mesma
+        }
+    }, [ingredienteAtualId, ingredientesDisponiveis]);
+
     const formatarMoeda = (valor: number) => {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+    };
+
+    // NOVO: Função auxiliar para converter o valor digitado para a unidade base cadastrada no banco
+    const converterParaUnidadeBase = (qtd: number, de: string, para: string): number => {
+        const unidadeDe = de.toLowerCase();
+        const unidadePara = para.toLowerCase();
+
+        if (unidadeDe === unidadePara) return qtd;
+
+        // Conversões de Peso
+        if (unidadeDe === 'g' && unidadePara === 'kg') return qtd / 1000;
+        if (unidadeDe === 'kg' && unidadePara === 'g') return qtd * 1000;
+
+        // Conversões de Volume
+        if (unidadeDe === 'ml' && unidadePara === 'l') return qtd / 1000;
+        if (unidadeDe === 'l' && unidadePara === 'ml') return qtd * 1000;
+
+        return qtd; // Caso seja 'un' ou unidades incompatíveis
     };
 
     // Lógica do Formulário de Ingredientes
@@ -90,13 +116,20 @@ export default function PrecificacaoModulo() {
         const produtoBase = ingredientesDisponiveis.find(p => p.id === ingredienteAtualId);
         if (!produtoBase) return;
 
+        // Realiza a conversão antes de salvar no estado da listagem
+        const quantidadeConvertida = converterParaUnidadeBase(
+            Number(quantidadeAtual),
+            unidadeAtualEntrada,
+            produtoBase.unidade_medida
+        );
+
         const jaExiste = ingredientesSelecionados.find(i => i.id === ingredienteAtualId);
         if (jaExiste) {
             setIngredientesSelecionados(ingredientesSelecionados.map(i =>
-                i.id === ingredienteAtualId ? { ...i, quantidade_utilizada: i.quantidade_utilizada + Number(quantidadeAtual) } : i
+                i.id === ingredienteAtualId ? { ...i, quantidade_utilizada: i.quantidade_utilizada + quantidadeConvertida } : i
             ));
         } else {
-            setIngredientesSelecionados([...ingredientesSelecionados, { ...produtoBase, quantidade_utilizada: Number(quantidadeAtual) }]);
+            setIngredientesSelecionados([...ingredientesSelecionados, { ...produtoBase, quantidade_utilizada: quantidadeConvertida }]);
         }
         setQuantidadeAtual('');
     };
@@ -132,16 +165,15 @@ export default function PrecificacaoModulo() {
                     custo_total: custoTotalReceita, preco_sugerido: precoSugerido
                 }).eq('id', fichaEmEdicaoId);
 
-                // Limpa os ingredientes antigos e insere os novos atualizados
                 await supabase.from('ficha_ingredientes').delete().eq('ficha_id', fichaEmEdicaoId);
                 const relacaoIngredientes = ingredientesSelecionados.map(ing => ({
                     ficha_id: fichaEmEdicaoId, produto_ingrediente_id: ing.id, quantidade_utilizada: ing.quantidade_utilizada
                 }));
                 await supabase.from('ficha_ingredientes').insert(relacaoIngredientes);
 
-                mostrarMensagem("Ficha atualizada com sucesso!", "sucesso");
+                mostrarMensagem("Ficha updated com sucesso!", "sucesso");
             } else {
-                // MODO CRIAÇÃO (Código Antigo)
+                // MODO CRIAÇÃO
                 const { data: produtoCriado, error: erroProduto } = await supabase.from('produtos').insert([{
                     nome: nomeProduto, tipo: 'venda', preco_custo: custoPorPorcao, preco_venda: precoSugerido
                 }]).select().single();
@@ -187,7 +219,7 @@ export default function PrecificacaoModulo() {
             }).filter(Boolean) as IngredienteReceita[];
             setIngredientesSelecionados(ingMapeados);
         }
-        
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -200,11 +232,9 @@ export default function PrecificacaoModulo() {
         setMargemLucro(100);
     };
 
-    // Excluir Ficha Definitivamente
     const confirmarExclusaoDaFicha = async () => {
         if (!fichaParaApagar) return;
         try {
-            // A ordem de exclusão importa devido aos relacionamentos (Deleta Filhos -> Deleta Pais)
             await supabase.from('ficha_ingredientes').delete().eq('ficha_id', fichaParaApagar.id);
             await supabase.from('fichas_tecnicas').delete().eq('id', fichaParaApagar.id);
             await supabase.from('produtos').delete().eq('id', fichaParaApagar.produto_venda_id);
@@ -222,14 +252,13 @@ export default function PrecificacaoModulo() {
 
     return (
         <div className="max-w-5xl mx-auto p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-8 relative">
-            
+
             {/* Feedback Visual */}
             {feedback.tipo && (
-                <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg transition-all duration-300 ${
-                    feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800 border-l-4 border-green-500' : 
-                    feedback.tipo === 'erro' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' : 
-                    'bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500'
-                }`}>
+                <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg transition-all duration-300 ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800 border-l-4 border-green-500' :
+                        feedback.tipo === 'erro' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' :
+                            'bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500'
+                    }`}>
                     <div className="flex items-center gap-2">
                         <span className="font-semibold">{feedback.tipo === 'sucesso' ? '✓' : feedback.tipo === 'erro' ? '✕' : '⚠'}</span>
                         <p className="text-sm">{feedback.msg}</p>
@@ -294,7 +323,7 @@ export default function PrecificacaoModulo() {
                     </div>
 
                     <div className="pt-4 border-t border-gray-200">
-                        <h3 className="font-semibold text-cafe-primary mb-3">Adicionar Ingrediente</h3>
+                        <h3 className="font-semibold text-cafe-primary mb-3">Adicionar Inrediente</h3>
                         <div className="flex gap-2 mb-2">
                             <select
                                 className="flex-1 p-2 border border-gray-300 rounded text-sm bg-white"
@@ -306,11 +335,24 @@ export default function PrecificacaoModulo() {
                                     </option>
                                 ))}
                             </select>
+
                             <input
                                 type="number" placeholder="Qtd"
                                 className="w-24 p-2 border border-gray-300 rounded text-sm"
-                                value={quantidadeAtual} onChange={(e) => setQuantidadeAtual(Number(e.target.value))}
+                                value={quantidadeAtual} onChange={(e) => setQuantidadeAtual(e.target.value === '' ? '' : Number(e.target.value))}
                             />
+
+                            {/* NOVO: Dropdown de Unidades de Medida de Entrada */}
+                            <select
+                                className="w-20 p-2 border border-gray-300 rounded text-sm bg-white font-semibold"
+                                value={unidadeAtualEntrada} onChange={(e) => setUnidadeAtualEntrada(e.target.value)}
+                            >
+                                <option value="g">g</option>
+                                <option value="kg">kg</option>
+                                <option value="ml">ml</option>
+                                <option value="l">l</option>
+                                <option value="un">un</option>
+                            </select>
                         </div>
                         <button
                             onClick={adicionarIngrediente}
@@ -357,9 +399,8 @@ export default function PrecificacaoModulo() {
 
                         <button
                             onClick={guardarFichaTecnica}
-                            className={`w-full mt-4 font-bold py-3 rounded transition shadow-lg text-white ${
-                                fichaEmEdicaoId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-cafe-primary hover:bg-cafe-dark'
-                            }`}
+                            className={`w-full mt-4 font-bold py-3 rounded transition shadow-lg text-white ${fichaEmEdicaoId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-cafe-primary hover:bg-cafe-dark'
+                                }`}
                         >
                             {fichaEmEdicaoId ? '🔄 Atualizar Ficha Técnica' : 'Confirmar e Salvar Nova Ficha'}
                         </button>
@@ -391,15 +432,15 @@ export default function PrecificacaoModulo() {
                                     <td className="p-3 text-gray-500">{ficha.margem_lucro_desejada}%</td>
                                     <td className="p-3 font-bold text-green-600">{formatarMoeda(ficha.preco_sugerido)}</td>
                                     <td className="p-3 text-center space-x-3">
-                                        <button 
-                                            onClick={() => carregarFichaParaEdicao(ficha)} 
+                                        <button
+                                            onClick={() => carregarFichaParaEdicao(ficha)}
                                             className="text-blue-600 hover:text-blue-800 font-semibold"
                                             title="Editar Ficha"
                                         >
                                             Editar
                                         </button>
-                                        <button 
-                                            onClick={() => setFichaParaApagar(ficha)} 
+                                        <button
+                                            onClick={() => setFichaParaApagar(ficha)}
                                             className="text-red-500 hover:text-red-700 font-semibold"
                                             title="Excluir Ficha"
                                         >
