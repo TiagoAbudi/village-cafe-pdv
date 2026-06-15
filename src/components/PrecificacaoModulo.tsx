@@ -10,6 +10,9 @@ type ProdutoDB = {
 
 type IngredienteReceita = ProdutoDB & {
     quantidade_utilizada: number;
+    quantidade_exibicao: number;
+    unidade_exibicao: string;
+    secao: string;
 };
 
 type FichaCadastrada = {
@@ -36,7 +39,13 @@ export default function PrecificacaoModulo() {
     // Estados de Inserção de Ingrediente
     const [ingredienteAtualId, setIngredienteAtualId] = useState('');
     const [quantidadeAtual, setQuantidadeAtual] = useState<number | ''>('');
-    const [unidadeAtualEntrada, setUnidadeAtualEntrada] = useState('g'); // NOVO: Estado para a unidade selecionada no input
+    const [unidadeAtualEntrada, setUnidadeAtualEntrada] = useState('g');
+
+    // NOVO: Gerenciamento explícito de seções
+    const [secoesDisponiveis, setSecoesDisponiveis] = useState<string[]>(['Receita Principal']);
+    const [secaoAtual, setSecaoAtual] = useState('Receita Principal');
+    const [isCriandoSecao, setIsCriandoSecao] = useState(false);
+    const [novaSecao, setNovaSecao] = useState('');
 
     // Estados de Edição e Exclusão
     const [fichaEmEdicaoId, setFichaEmEdicaoId] = useState<string | null>(null);
@@ -51,7 +60,6 @@ export default function PrecificacaoModulo() {
         setTimeout(() => setFeedback({ msg: '', tipo: null }), 4000);
     };
 
-    // 1. Carregar Dados Iniciais
     const carregarDados = async () => {
         const { data: ingData } = await supabase.from('produtos').select('*').eq('tipo', 'ingrediente').order('nome');
         if (ingData) {
@@ -76,14 +84,13 @@ export default function PrecificacaoModulo() {
         carregarDados();
     }, []);
 
-    // NOVO: Atualiza automaticamente a unidade de medida de entrada sugerida ao mudar o ingrediente no select
     useEffect(() => {
         const produtoBase = ingredientesDisponiveis.find(p => p.id === ingredienteAtualId);
         if (produtoBase) {
             const uniBase = produtoBase.unidade_medida.toLowerCase();
-            if (uniBase === 'kg') setUnidadeAtualEntrada('g'); // Se cadastrado em kg, sugere g
-            else if (uniBase === 'l') setUnidadeAtualEntrada('ml'); // Se cadastrado em l, sugere ml
-            else setUnidadeAtualEntrada(produtoBase.unidade_medida); // Caso contrário (un, etc), mantém a mesma
+            if (uniBase === 'kg') setUnidadeAtualEntrada('g');
+            else if (uniBase === 'l') setUnidadeAtualEntrada('ml');
+            else setUnidadeAtualEntrada(produtoBase.unidade_medida);
         }
     }, [ingredienteAtualId, ingredientesDisponiveis]);
 
@@ -91,54 +98,86 @@ export default function PrecificacaoModulo() {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
     };
 
-    // NOVO: Função auxiliar para converter o valor digitado para a unidade base cadastrada no banco
     const converterParaUnidadeBase = (qtd: number, de: string, para: string): number => {
         const unidadeDe = de.toLowerCase();
         const unidadePara = para.toLowerCase();
 
         if (unidadeDe === unidadePara) return qtd;
-
-        // Conversões de Peso
         if (unidadeDe === 'g' && unidadePara === 'kg') return qtd / 1000;
         if (unidadeDe === 'kg' && unidadePara === 'g') return qtd * 1000;
-
-        // Conversões de Volume
         if (unidadeDe === 'ml' && unidadePara === 'l') return qtd / 1000;
         if (unidadeDe === 'l' && unidadePara === 'ml') return qtd * 1000;
 
-        return qtd; // Caso seja 'un' ou unidades incompatíveis
+        return qtd;
     };
 
-    // Lógica do Formulário de Ingredientes
+    // NOVO: Função para salvar a nova seção criada pelo usuário
+    const salvarNovaSecao = () => {
+        const nomeFormatado = novaSecao.trim();
+        if (!nomeFormatado) return;
+
+        if (!secoesDisponiveis.includes(nomeFormatado)) {
+            setSecoesDisponiveis([...secoesDisponiveis, nomeFormatado]);
+        }
+
+        setSecaoAtual(nomeFormatado);
+        setIsCriandoSecao(false);
+        setNovaSecao('');
+    };
+
     const adicionarIngrediente = () => {
-        if (!ingredienteAtualId || !quantidadeAtual) return;
+        if (!ingredienteAtualId || !quantidadeAtual || !secaoAtual) return;
 
         const produtoBase = ingredientesDisponiveis.find(p => p.id === ingredienteAtualId);
         if (!produtoBase) return;
 
-        // Realiza a conversão antes de salvar no estado da listagem
         const quantidadeConvertida = converterParaUnidadeBase(
             Number(quantidadeAtual),
             unidadeAtualEntrada,
             produtoBase.unidade_medida
         );
 
-        const jaExiste = ingredientesSelecionados.find(i => i.id === ingredienteAtualId);
+        const jaExiste = ingredientesSelecionados.find(
+            i => i.id === ingredienteAtualId && i.secao === secaoAtual
+        );
+
         if (jaExiste) {
             setIngredientesSelecionados(ingredientesSelecionados.map(i =>
-                i.id === ingredienteAtualId ? { ...i, quantidade_utilizada: i.quantidade_utilizada + quantidadeConvertida } : i
+                i.id === ingredienteAtualId && i.secao === secaoAtual
+                    ? {
+                        ...i,
+                        quantidade_utilizada: i.quantidade_utilizada + quantidadeConvertida,
+                        quantidade_exibicao: i.quantidade_exibicao + Number(quantidadeAtual)
+                    }
+                    : i
             ));
         } else {
-            setIngredientesSelecionados([...ingredientesSelecionados, { ...produtoBase, quantidade_utilizada: quantidadeConvertida }]);
+            setIngredientesSelecionados([...ingredientesSelecionados, {
+                ...produtoBase,
+                quantidade_utilizada: quantidadeConvertida,
+                quantidade_exibicao: Number(quantidadeAtual),
+                unidade_exibicao: unidadeAtualEntrada,
+                secao: secaoAtual
+            }]);
         }
         setQuantidadeAtual('');
     };
 
-    const removerIngrediente = (id: string) => {
-        setIngredientesSelecionados(ingredientesSelecionados.filter(ing => ing.id !== id));
+    const removerIngrediente = (id: string, secao: string) => {
+        setIngredientesSelecionados(ingredientesSelecionados.filter(ing => !(ing.id === id && ing.secao === secao)));
     };
 
-    // Cálculos Dinâmicos
+    const ingredientesAgrupadosPorSecao = useMemo(() => {
+        const grupos: { [key: string]: IngredienteReceita[] } = {};
+        ingredientesSelecionados.forEach(ing => {
+            if (!grupos[ing.secao]) {
+                grupos[ing.secao] = [];
+            }
+            grupos[ing.secao].push(ing);
+        });
+        return grupos;
+    }, [ingredientesSelecionados]);
+
     const custoTotalReceita = useMemo(() => {
         return ingredientesSelecionados.reduce((acc, ing) => acc + (ing.quantidade_utilizada * ing.preco_custo), 0);
     }, [ingredientesSelecionados]);
@@ -146,7 +185,6 @@ export default function PrecificacaoModulo() {
     const custoPorPorcao = rendimento > 0 ? custoTotalReceita / rendimento : 0;
     const precoSugerido = custoPorPorcao + (custoPorPorcao * (margemLucro / 100));
 
-    // Salvar ou Atualizar Ficha
     const guardarFichaTecnica = async () => {
         if (!nomeProduto || ingredientesSelecionados.length === 0) {
             mostrarMensagem("Preencha o nome do produto e adicione pelo menos um ingrediente.", "aviso");
@@ -155,7 +193,6 @@ export default function PrecificacaoModulo() {
 
         try {
             if (fichaEmEdicaoId && produtoEmEdicaoId) {
-                // MODO EDIÇÃO
                 await supabase.from('produtos').update({
                     nome: nomeProduto, preco_custo: custoPorPorcao, preco_venda: precoSugerido
                 }).eq('id', produtoEmEdicaoId);
@@ -167,13 +204,15 @@ export default function PrecificacaoModulo() {
 
                 await supabase.from('ficha_ingredientes').delete().eq('ficha_id', fichaEmEdicaoId);
                 const relacaoIngredientes = ingredientesSelecionados.map(ing => ({
-                    ficha_id: fichaEmEdicaoId, produto_ingrediente_id: ing.id, quantidade_utilizada: ing.quantidade_utilizada
+                    ficha_id: fichaEmEdicaoId,
+                    produto_ingrediente_id: ing.id,
+                    quantidade_utilizada: ing.quantidade_utilizada,
+                    secao: ing.secao
                 }));
                 await supabase.from('ficha_ingredientes').insert(relacaoIngredientes);
 
-                mostrarMensagem("Ficha updated com sucesso!", "sucesso");
+                mostrarMensagem("Ficha atualizada com sucesso!", "sucesso");
             } else {
-                // MODO CRIAÇÃO
                 const { data: produtoCriado, error: erroProduto } = await supabase.from('produtos').insert([{
                     nome: nomeProduto, tipo: 'venda', preco_custo: custoPorPorcao, preco_venda: precoSugerido
                 }]).select().single();
@@ -186,7 +225,10 @@ export default function PrecificacaoModulo() {
                 if (erroFicha) throw erroFicha;
 
                 const relacaoIngredientes = ingredientesSelecionados.map(ing => ({
-                    ficha_id: fichaCriada.id, produto_ingrediente_id: ing.id, quantidade_utilizada: ing.quantidade_utilizada
+                    ficha_id: fichaCriada.id,
+                    produto_ingrediente_id: ing.id,
+                    quantidade_utilizada: ing.quantidade_utilizada,
+                    secao: ing.secao
                 }));
                 const { error: erroItens } = await supabase.from('ficha_ingredientes').insert(relacaoIngredientes);
                 if (erroItens) throw erroItens;
@@ -203,7 +245,6 @@ export default function PrecificacaoModulo() {
         }
     };
 
-    // Carregar Ficha para o Formulário
     const carregarFichaParaEdicao = async (ficha: FichaCadastrada) => {
         setNomeProduto(ficha.nome_produto || '');
         setRendimento(ficha.rendimento_porcoes);
@@ -213,9 +254,34 @@ export default function PrecificacaoModulo() {
 
         const { data: itensFicha } = await supabase.from('ficha_ingredientes').select('*').eq('ficha_id', ficha.id);
         if (itensFicha && ingredientesDisponiveis.length > 0) {
+
+            // NOVO: Descobre todas as seções que essa ficha já tinha salva
+            const secoesUnicas = Array.from(new Set(itensFicha.map(i => i.secao || 'Receita Principal')));
+            setSecoesDisponiveis(secoesUnicas.length > 0 ? secoesUnicas : ['Receita Principal']);
+            setSecaoAtual(secoesUnicas.length > 0 ? secoesUnicas[0] : 'Receita Principal');
+
             const ingMapeados = itensFicha.map(item => {
                 const base = ingredientesDisponiveis.find(i => i.id === item.produto_ingrediente_id);
-                return base ? { ...base, quantidade_utilizada: item.quantidade_utilizada } : null;
+                if (!base) return null;
+
+                let qtdExibicao = item.quantidade_utilizada;
+                let uniExibicao = base.unidade_medida;
+
+                if (base.unidade_medida.toLowerCase() === 'kg' && qtdExibicao < 1) {
+                    qtdExibicao = qtdExibicao * 1000;
+                    uniExibicao = 'g';
+                } else if (base.unidade_medida.toLowerCase() === 'l' && qtdExibicao < 1) {
+                    qtdExibicao = qtdExibicao * 1000;
+                    uniExibicao = 'ml';
+                }
+
+                return {
+                    ...base,
+                    quantidade_utilizada: item.quantidade_utilizada,
+                    quantidade_exibicao: qtdExibicao,
+                    unidade_exibicao: uniExibicao,
+                    secao: item.secao || 'Receita Principal'
+                };
             }).filter(Boolean) as IngredienteReceita[];
             setIngredientesSelecionados(ingMapeados);
         }
@@ -230,6 +296,9 @@ export default function PrecificacaoModulo() {
         setIngredientesSelecionados([]);
         setRendimento(1);
         setMargemLucro(100);
+        setSecoesDisponiveis(['Receita Principal']);
+        setSecaoAtual('Receita Principal');
+        setIsCriandoSecao(false);
     };
 
     const confirmarExclusaoDaFicha = async () => {
@@ -253,7 +322,6 @@ export default function PrecificacaoModulo() {
     return (
         <div className="max-w-5xl mx-auto p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-8 relative">
 
-            {/* Feedback Visual */}
             {feedback.tipo && (
                 <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg transition-all duration-300 ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800 border-l-4 border-green-500' :
                         feedback.tipo === 'erro' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' :
@@ -266,7 +334,6 @@ export default function PrecificacaoModulo() {
                 </div>
             )}
 
-            {/* Modal de Exclusão */}
             {fichaParaApagar && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
@@ -291,13 +358,12 @@ export default function PrecificacaoModulo() {
                 )}
             </h2>
 
-            {/* ÁREA SUPERIOR: FORMULÁRIO */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-semibold text-cafe-dark mb-1">Produto Final (Venda)</label>
                         <input
-                            type="text" placeholder="Ex: Cappuccino Especial"
+                            type="text" placeholder="Ex: Bolo de Chocolate Especial"
                             className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-cafe-secondary outline-none"
                             value={nomeProduto} onChange={(e) => setNomeProduto(e.target.value)}
                         />
@@ -322,9 +388,61 @@ export default function PrecificacaoModulo() {
                         </div>
                     </div>
 
-                    <div className="pt-4 border-t border-gray-200">
-                        <h3 className="font-semibold text-cafe-primary mb-3">Adicionar Inrediente</h3>
-                        <div className="flex gap-2 mb-2">
+                    <div className="pt-4 border-t border-gray-200 space-y-3">
+                        <h3 className="font-semibold text-cafe-primary">Adicionar Ingrediente</h3>
+
+                        {/* NOVO: Switch entre o Select e o Input Criador de Seções */}
+                        <div>
+                            <label className="block text-xs font-semibold text-cafe-dark mb-1">Parte / Seção da Receita</label>
+
+                            {isCriandoSecao ? (
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Ex: Cobertura, Recheio..."
+                                        className="flex-1 p-2 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-cafe-secondary bg-white"
+                                        value={novaSecao}
+                                        onChange={(e) => setNovaSecao(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <button
+                                        onClick={salvarNovaSecao}
+                                        className="px-4 bg-green-600 text-white font-bold rounded hover:bg-green-700 transition"
+                                        title="Salvar parte"
+                                    >
+                                        ✓
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsCriandoSecao(false); setNovaSecao(''); }}
+                                        className="px-4 bg-gray-200 text-gray-700 font-bold rounded hover:bg-gray-300 transition"
+                                        title="Cancelar"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <select
+                                        className="flex-1 p-2 border border-gray-300 rounded text-sm bg-white outline-none focus:ring-2 focus:ring-cafe-secondary"
+                                        value={secaoAtual}
+                                        onChange={(e) => setSecaoAtual(e.target.value)}
+                                    >
+                                        {secoesDisponiveis.map(secao => (
+                                            <option key={secao} value={secao}>{secao}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={() => setIsCriandoSecao(true)}
+                                        className="px-4 bg-cafe-secondary text-cafe-dark font-bold rounded hover:bg-opacity-90 transition shadow-sm"
+                                        title="Criar nova parte para a receita"
+                                    >
+                                        + Parte
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2">
                             <select
                                 className="flex-1 p-2 border border-gray-300 rounded text-sm bg-white"
                                 value={ingredienteAtualId} onChange={(e) => setIngredienteAtualId(e.target.value)}
@@ -342,7 +460,6 @@ export default function PrecificacaoModulo() {
                                 value={quantidadeAtual} onChange={(e) => setQuantidadeAtual(e.target.value === '' ? '' : Number(e.target.value))}
                             />
 
-                            {/* NOVO: Dropdown de Unidades de Medida de Entrada */}
                             <select
                                 className="w-20 p-2 border border-gray-300 rounded text-sm bg-white font-semibold"
                                 value={unidadeAtualEntrada} onChange={(e) => setUnidadeAtualEntrada(e.target.value)}
@@ -358,7 +475,7 @@ export default function PrecificacaoModulo() {
                             onClick={adicionarIngrediente}
                             className="w-full bg-cafe-secondary text-cafe-dark font-bold py-2 rounded hover:bg-opacity-90 transition"
                         >
-                            + Inserir na Receita
+                            + Inserir na Seção "{secaoAtual}"
                         </button>
                     </div>
                 </div>
@@ -366,20 +483,35 @@ export default function PrecificacaoModulo() {
                 <div className="bg-cafe-bg p-4 rounded-lg flex flex-col justify-between border border-gray-200">
                     <div>
                         <h3 className="font-semibold text-cafe-primary mb-3">Composição da Receita</h3>
+
                         {ingredientesSelecionados.length === 0 ? (
                             <p className="text-sm text-gray-500 italic">Nenhum ingrediente adicionado.</p>
                         ) : (
-                            <ul className="space-y-2 mb-4 overflow-y-auto max-h-48">
-                                {ingredientesSelecionados.map(ing => (
-                                    <li key={ing.id} className="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-gray-100">
-                                        <span>{ing.nome} ({ing.quantidade_utilizada}{ing.unidade_medida})</span>
-                                        <div className="flex items-center gap-3">
-                                            <span className="font-medium">{formatarMoeda(ing.quantidade_utilizada * ing.preco_custo)}</span>
-                                            <button onClick={() => removerIngrediente(ing.id)} className="text-red-500 hover:text-red-700 font-bold">X</button>
+                            <div className="space-y-4 overflow-y-auto max-h-64 pr-1">
+                                {Object.entries(ingredientesAgrupadosPorSecao).map(([secao, itens]) => {
+                                    const custoDaSecao = itens.reduce((acc, ing) => acc + (ing.quantidade_utilizada * ing.preco_custo), 0);
+
+                                    return (
+                                        <div key={secao} className="border border-gray-200 rounded p-2 bg-white shadow-sm">
+                                            <div className="flex justify-between items-center border-b border-gray-100 pb-1 mb-2">
+                                                <span className="font-bold text-xs uppercase text-cafe-primary tracking-wider">{secao}</span>
+                                                <span className="text-xs font-bold text-gray-500">Subtotal: {formatarMoeda(custoDaSecao)}</span>
+                                            </div>
+                                            <ul className="space-y-1.5">
+                                                {itens.map(ing => (
+                                                    <li key={`${ing.id}-${secao}`} className="flex justify-between items-center text-xs bg-gray-50 p-1.5 rounded border border-gray-100/60">
+                                                        <span>{ing.nome} ({ing.quantidade_exibicao}{ing.unidade_exibicao})</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium text-gray-700">{formatarMoeda(ing.quantidade_utilizada * ing.preco_custo)}</span>
+                                                            <button onClick={() => removerIngrediente(ing.id, secao)} className="text-red-500 hover:text-red-700 font-bold">X</button>
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
-                                    </li>
-                                ))}
-                            </ul>
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
 
