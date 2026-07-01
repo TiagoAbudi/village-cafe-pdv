@@ -5,7 +5,6 @@ type ProdutoVenda = { id: string; nome: string; preco_venda: number; quantidade_
 type ItemCarrinho = { produto: ProdutoVenda; quantidade: number; };
 type PagamentoMisto = { metodo: string; valor: number | '' };
 
-// NOVO: Interface para receber os dados do atendente via Props
 interface PDVModuloProps {
   atendente: string;
 }
@@ -97,7 +96,6 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
   const finalizarVenda = async () => {
     if (carrinho.length === 0) return mostrarMensagem('Adicione produtos ao carrinho.', 'aviso');
-    if (!identificacaoPedido.trim()) return mostrarMensagem('Informe a identificação.', 'aviso');
     if (modoPagamento === 'misto' && totalPagoMisto < totalVenda) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
 
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
@@ -128,9 +126,11 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
     }
 
     try {
-      // ATUALIZADO: Inclui a coluna 'atendente' no payload enviado ao Supabase
+      // ATUALIZADO: Se identificacaoPedido estiver vazio, assume 'Venda Balcão' automaticamente
+      const identificacaoFinal = identificacaoPedido.trim() || 'Venda Balcão';
+
       const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{
-        identificacao_pedido: identificacaoPedido, total: totalVenda, metodo_pagamento: metodosStr,
+        identificacao_pedido: identificacaoFinal, total: totalVenda, metodo_pagamento: metodosStr,
         valor_pix: vPix, valor_dinheiro: vDin, valor_cartao_credito: vCred, valor_cartao_debito: vDeb,
         atendente: atendente
       }]).select().single();
@@ -170,7 +170,6 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
       <div className="flex-1 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 p-4 flex flex-col">
         <h2 className="text-xl font-bold text-cafe-primary mb-4 border-b pb-2">Menu de Produtos</h2>
 
-        {/* BARRA DE BUSCA FIXA */}
         <div className="mb-4">
           <input
             type="text"
@@ -181,74 +180,28 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
           />
         </div>
 
-        {/* LISTA DE PRODUTOS COM SCROLL E ALTURA FIXA */}
         <div className="space-y-2 overflow-auto h-[580px] pr-2">
           {produtosFiltrados.map(produto => {
-            const semEstoque =
-              !produto.is_receita &&
-              produto.quantidade_estoque <= 0;
-
-            const estoqueBaixo =
-              !produto.is_receita &&
-              produto.quantidade_estoque > 0 &&
-              produto.quantidade_estoque <= 5;
+            const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
+            const estoqueBaixo = !produto.is_receita && produto.quantidade_estoque > 0 && produto.quantidade_estoque <= 5;
 
             return (
-              <div
-                key={produto.id}
-                className="
-          bg-white
-          border
-          rounded-lg
-          p-3
-          flex
-          justify-between
-          items-center
-          hover:shadow-md
-          transition
-        "
-              >
+              <div key={produto.id} className="bg-white border rounded-lg p-3 flex justify-between items-center hover:shadow-md transition">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold truncate">
-                    {produto.nome}
-                  </h3>
-
+                  <h3 className="font-semibold truncate">{produto.nome}</h3>
                   <div className="flex gap-3 mt-1 text-sm">
-                    <span className="font-bold text-cafe-primary">
-                      {formatarMoeda(produto.preco_venda)}
-                    </span>
-
+                    <span className="font-bold text-cafe-primary">{formatarMoeda(produto.preco_venda)}</span>
                     {!produto.is_receita && (
-                      <span
-                        className={
-                          semEstoque
-                            ? "text-red-500"
-                            : estoqueBaixo
-                              ? "text-yellow-600"
-                              : "text-green-600"
-                        }
-                      >
+                      <span className={semEstoque ? "text-red-500" : estoqueBaixo ? "text-yellow-600" : "text-green-600"}>
                         Estoque: {produto.quantidade_estoque}
                       </span>
                     )}
                   </div>
                 </div>
-
                 <button
                   onClick={() => adicionarAoCarrinho(produto)}
                   disabled={semEstoque}
-                  className={`
-            ml-3
-            w-10
-            h-10
-            rounded-full
-            font-bold
-            text-xl
-            ${semEstoque
-                      ? 'bg-gray-200 text-gray-400'
-                      : 'bg-cafe-primary text-white'
-                    }
-          `}
+                  className={`ml-3 w-10 h-10 rounded-full font-bold text-xl ${semEstoque ? 'bg-gray-200 text-gray-400' : 'bg-cafe-primary text-white'}`}
                 >
                   +
                 </button>
@@ -282,7 +235,9 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
         <div className="p-4 border-t border-gray-200 bg-white rounded-b-lg space-y-3">
           <div className="flex justify-between items-center text-2xl font-black border-b pb-2"><span>Total:</span><span className="text-green-600">{formatarMoeda(totalVenda)}</span></div>
-          <input type="text" placeholder="Identificação (Ex: Mesa 02)" className="w-full p-2 border border-gray-300 rounded text-center font-bold outline-none focus:ring-2 focus:ring-cafe-primary" value={identificacaoPedido} onChange={(e) => setIdentificacaoPedido(e.target.value)} />
+
+          {/* Placeholder atualizado para indicar que se tornou opcional */}
+          <input type="text" placeholder="Identificação (Opcional - Ex: Mesa 02)" className="w-full p-2 border border-gray-300 rounded text-center font-bold outline-none focus:ring-2 focus:ring-cafe-primary" value={identificacaoPedido} onChange={(e) => setIdentificacaoPedido(e.target.value)} />
 
           <div className="flex bg-gray-100 p-1 rounded-lg">
             <button onClick={() => setModoPagamento('unico')} className={`flex-1 text-sm py-1 font-bold rounded transition ${modoPagamento === 'unico' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Pagamento Único</button>

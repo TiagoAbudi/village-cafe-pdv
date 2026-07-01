@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
-type ProdutoVendido = { nome: string; quantidade: number; faturamento: number };
+type ProdutoVendido = { nome: string; quantidade: number; faturamento: number; custo: number; lucro: number };
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -101,13 +101,16 @@ export default function DashboardRendimentos() {
     const metricas = useMemo(() => {
         let faturamentoTotal = 0;
         let lucroTotal = 0;
+        let custoTotal = 0;
         let totalPix = 0;
         let totalDinheiro = 0;
         let totalCredito = 0;
         let totalDebito = 0;
-        const contagemProdutos: { [key: string]: { qtd: number; fat: number } } = {};
 
-        const vendasPorDia: Record<string, { valor: number, qtd: number }> = {};
+        const contagemProdutos: { [key: string]: { qtd: number; fat: number; custo: number } } = {};
+
+        // ADICIONADO: rastrear o custo diário também
+        const vendasPorDia: Record<string, { valor: number, qtd: number, custo: number }> = {};
 
         vendas.forEach((venda) => {
             faturamentoTotal += venda.total;
@@ -117,21 +120,27 @@ export default function DashboardRendimentos() {
             totalDebito += venda.valor_cartao_debito || 0;
 
             const diaStr = venda.data_venda.split('T')[0];
-            if (!vendasPorDia[diaStr]) vendasPorDia[diaStr] = { valor: 0, qtd: 0 };
+            if (!vendasPorDia[diaStr]) vendasPorDia[diaStr] = { valor: 0, qtd: 0, custo: 0 };
             vendasPorDia[diaStr].valor += venda.total;
             vendasPorDia[diaStr].qtd += 1;
 
             venda.itens_venda?.forEach((item: any) => {
                 const precoVendaItem = item.preco_unitario * item.quantidade;
                 const precoCustoItem = (item.produtos?.preco_custo || 0) * item.quantidade;
+
                 lucroTotal += (precoVendaItem - precoCustoItem);
+                custoTotal += precoCustoItem;
+
+                // ADICIONADO: somando custo diário
+                vendasPorDia[diaStr].custo += precoCustoItem;
 
                 const nomeProd = item.produtos?.nome || 'Produto Removido';
                 if (!contagemProdutos[nomeProd]) {
-                    contagemProdutos[nomeProd] = { qtd: 0, fat: 0 };
+                    contagemProdutos[nomeProd] = { qtd: 0, fat: 0, custo: 0 };
                 }
                 contagemProdutos[nomeProd].qtd += item.quantidade;
                 contagemProdutos[nomeProd].fat += precoVendaItem;
+                contagemProdutos[nomeProd].custo += precoCustoItem;
             });
         });
 
@@ -143,15 +152,22 @@ export default function DashboardRendimentos() {
                 nome,
                 quantidade: contagemProdutos[nome].qtd,
                 faturamento: contagemProdutos[nome].fat,
+                custo: contagemProdutos[nome].custo,
+                lucro: contagemProdutos[nome].fat - contagemProdutos[nome].custo,
             }))
             .sort((a, b) => b.quantidade - a.quantidade)
             .slice(0, 5);
 
         const graficoDados = Object.keys(vendasPorDia).sort().map(dia => {
             const [, mes, d] = dia.split('-');
+            const valorDia = vendasPorDia[dia].valor;
+            const custoDia = vendasPorDia[dia].custo;
+
             return {
                 dataCurta: `${d}/${mes}`,
-                valor: vendasPorDia[dia].valor,
+                valor: valorDia,
+                custo: custoDia, // ADICIONADO para o tooltip
+                lucro: valorDia - custoDia, // ADICIONADO para o tooltip
                 qtd: vendasPorDia[dia].qtd
             };
         });
@@ -161,6 +177,7 @@ export default function DashboardRendimentos() {
         return {
             faturamentoTotal,
             lucroTotal,
+            custoTotal,
             ticketMedio,
             totalVendasCount,
             produtosMaisVendidos,
@@ -177,9 +194,8 @@ export default function DashboardRendimentos() {
     const svgWidth = Math.max(800, numPontos * 100);
     const svgHeight = 320;
 
-    // Margens de segurança enormes para evitar cortes
-    const padX = 70; // Espaço nas laterais
-    const padYTop = 100; // Espaço no topo para caber o tooltip todo
+    const padX = 70;
+    const padYTop = 100;
     const padYBot = 270;
 
     const usableWidth = svgWidth - padX * 2;
@@ -303,7 +319,7 @@ export default function DashboardRendimentos() {
                         </div>
                     </div>
 
-                    {/* GRÁFICO DE LINHAS CORRIGIDO */}
+                    {/* GRÁFICO DE LINHAS */}
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-6 relative z-0">
                         <h3 className="font-bold text-gray-700 mb-2 text-sm uppercase tracking-wide">Evolução do Faturamento</h3>
 
@@ -312,22 +328,38 @@ export default function DashboardRendimentos() {
                         ) : (
                             <div className="w-full relative pb-4 pt-4">
                                 <div className="w-full overflow-x-auto custom-scrollbar relative">
-
-                                    {/* Container relative onde as % do Tooltip funcionam de forma perfeita */}
                                     <div className="relative" style={{ height: `${svgHeight}px`, minWidth: `${svgWidth}px` }}>
 
-                                        {/* Tooltip mapeado 1:1 com as dimensões do SVG */}
                                         {tooltip.visivel && tooltip.p && (
                                             <div
-                                                className="absolute z-50 bg-gray-900 text-white p-3 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-75"
+                                                className="absolute z-50 bg-gray-900 text-white p-3 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-75 min-w-[140px]"
                                                 style={{
                                                     left: `${(tooltip.p.x / svgWidth) * 100}%`,
                                                     top: `calc(${(tooltip.p.y / svgHeight) * 100}% - 15px)`
                                                 }}
                                             >
                                                 <div className="font-black text-xs text-center border-b border-gray-700 pb-1 mb-2">{tooltip.p.dataCurta}</div>
-                                                <div className="text-xs text-gray-300">Valor: <span className="font-bold text-green-400 text-sm ml-1">{formatarMoeda(tooltip.p.valor)}</span></div>
-                                                <div className="text-xs text-gray-300 mt-1">Vendas: <span className="font-bold text-blue-300 text-sm ml-1">{tooltip.p.qtd}</span></div>
+
+                                                {/* INFORMAÇÕES ATUALIZADAS NO TOOLTIP */}
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between items-center text-xs text-gray-300">
+                                                        <span>Bruto:</span>
+                                                        <span className="font-bold text-gray-100 ml-2">{formatarMoeda(tooltip.p.valor)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-xs text-gray-300">
+                                                        <span>Custo:</span>
+                                                        <span className="font-bold text-red-400 ml-2">{formatarMoeda(tooltip.p.custo)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-xs text-gray-300">
+                                                        <span>Lucro:</span>
+                                                        <span className="font-bold text-green-400 ml-2">{formatarMoeda(tooltip.p.lucro)}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-between items-center text-xs text-gray-300 mt-2 pt-2 border-t border-gray-700">
+                                                    <span>Qtd Vendas:</span>
+                                                    <span className="font-bold text-blue-300 ml-2">{tooltip.p.qtd}</span>
+                                                </div>
 
                                                 <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full border-[6px] border-transparent border-t-gray-900"></div>
                                             </div>
@@ -383,6 +415,7 @@ export default function DashboardRendimentos() {
 
                     {/* GRIDS INFERIORES */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                             <h3 className="font-bold text-gray-700 mb-4 border-b pb-2 text-sm uppercase tracking-wide">Recebimentos</h3>
                             <div className="space-y-4">
@@ -390,6 +423,17 @@ export default function DashboardRendimentos() {
                                 <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💵 Dinheiro</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalDinheiro)}</span></div>
                                 <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💳 Cartão de Crédito</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalCredito)}</span></div>
                                 <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💳 Cartão de Débito</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalDebito)}</span></div>
+
+                                <div className="pt-3 mt-3 border-t border-gray-100 space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-700 font-bold">💰 Total Recebido</span>
+                                        <span className="font-black text-green-600">{formatarMoeda(metricas.faturamentoTotal)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-700 font-bold">📉 Total Gasto (Custo)</span>
+                                        <span className="font-black text-red-500">{formatarMoeda(metricas.custoTotal)}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -401,7 +445,9 @@ export default function DashboardRendimentos() {
                                         <tr className="text-gray-400 font-semibold border-b">
                                             <th className="pb-2">PRODUTO</th>
                                             <th className="pb-2 text-center">QTD</th>
-                                            <th className="pb-2 text-right">FATURAMENTO</th>
+                                            <th className="pb-2 text-right">CUSTO</th>
+                                            <th className="pb-2 text-right">VALOR BRUTO</th>
+                                            <th className="pb-2 text-right">LUCRO</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -409,11 +455,13 @@ export default function DashboardRendimentos() {
                                             <tr key={idx} className="border-b last:border-0 hover:bg-gray-50 transition">
                                                 <td className="py-3 font-semibold text-gray-800">{idx + 1}. {prod.nome}</td>
                                                 <td className="py-3 text-center font-bold text-gray-600">{prod.quantidade} un</td>
-                                                <td className="py-3 text-right font-black text-cafe-primary">{formatarMoeda(prod.faturamento)}</td>
+                                                <td className="py-3 text-right text-red-500 font-medium">{formatarMoeda(prod.custo)}</td>
+                                                <td className="py-3 text-right font-bold text-gray-700">{formatarMoeda(prod.faturamento)}</td>
+                                                <td className="py-3 text-right font-black text-green-600">{formatarMoeda(prod.lucro)}</td>
                                             </tr>
                                         ))}
                                         {metricas.produtosMaisVendidos.length === 0 && (
-                                            <tr><td colSpan={3} className="text-center py-6 text-gray-400 italic">Nenhuma venda registada.</td></tr>
+                                            <tr><td colSpan={5} className="text-center py-6 text-gray-400 italic">Nenhuma venda registada.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

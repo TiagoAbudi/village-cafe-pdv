@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 type ItemVenda = { produto_id: string; quantidade: number; preco_unitario: number; produtos: { nome: string } };
-type Venda = { 
+type Venda = {
   id: string; total: number; metodo_pagamento: string; data_venda: string; identificacao_pedido: string;
   valor_pix: number; valor_dinheiro: number; valor_cartao_credito: number; valor_cartao_debito: number;
   atendente: string; itens_venda: ItemVenda[];
 };
-type Caixa = { id: string; fundo_inicial: number; status: string; data_abertura: string };
+type Caixa = { id: string; fundo_inicial: number; status: string; data_abertura: string; data_fechamento?: string; valor_informado_fechamento?: number };
 type ProdutoAtivo = { id: string; nome: string; preco_venda: number; quantidade_estoque: number; is_receita: boolean; };
 type ItemEdicao = { produto_id: string; nome: string; preco_unitario: number; quantidade: number; is_receita: boolean; };
 
@@ -15,18 +15,21 @@ export default function DashboardModulo() {
   const [caixaAtual, setCaixaAtual] = useState<Caixa | null>(null);
   const [fundoTroco, setFundoTroco] = useState<number | ''>('');
   const [vendasHoje, setVendasHoje] = useState<Venda[]>([]);
+  const [movimentacoesCaixa, setMovimentacoesCaixa] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
   const [modalConfirmacao, setModalConfirmacao] = useState(false);
+  const [valorFechamentoInput, setValorFechamentoInput] = useState<number | ''>('');
   const [vendaParaCancelar, setVendaParaCancelar] = useState<Venda | null>(null);
 
-  // ESTADOS PARA EDIÇÃO DE VENDA
+  const [modalResumo, setModalResumo] = useState(false);
+
   const [vendaEmEdicao, setVendaEmEdicao] = useState<Venda | null>(null);
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<ItemEdicao[]>([]);
   const [produtosDisponiveis, setProdutosDisponiveis] = useState<ProdutoAtivo[]>([]);
   const [produtoAddId, setProdutoAddId] = useState('');
-  
+
   const [editPix, setEditPix] = useState<number | ''>('');
   const [editDinheiro, setEditDinheiro] = useState<number | ''>('');
   const [editCredito, setEditCredito] = useState<number | ''>('');
@@ -41,34 +44,51 @@ export default function DashboardModulo() {
 
   const verificarStatusCaixa = async () => {
     setCarregando(true);
-    const { data: caixaData } = await supabase.from('controle_caixa').select('*').eq('status', 'aberto').order('data_abertura', { ascending: false }).limit(1).single();
+    const { data: caixaData } = await supabase.from('controle_caixa').select('*').eq('status', 'aberto').order('data_abertura', { ascending: false }).limit(1).maybeSingle();
     if (caixaData) {
       setCaixaAtual(caixaData);
-      buscarVendasDoCaixa(caixaData.data_abertura);
+      buscarVendasDoCaixa(caixaData.data_abertura, caixaData.id);
     } else {
       setCaixaAtual(null);
     }
     setCarregando(false);
   };
 
-  const buscarVendasDoCaixa = async (dataAbertura: string) => {
-    const { data } = await supabase.from('vendas').select(`*, itens_venda ( produto_id, quantidade, preco_unitario, produtos ( nome ) )`).gte('data_venda', dataAbertura).order('data_venda', { ascending: false });
-    if (data) setVendasHoje(data as unknown as Venda[]);
+  const buscarVendasDoCaixa = async (dataAbertura: string, caixaId: string) => {
+    const { data: vendas } = await supabase.from('vendas').select(`*, itens_venda ( produto_id, quantidade, preco_unitario, produtos ( nome ) )`).gte('data_venda', dataAbertura).order('data_venda', { ascending: false });
+    if (vendas) setVendasHoje(vendas as unknown as Venda[]);
+
+    const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixaId);
+    if (movs) setMovimentacoesCaixa(movs);
   };
 
   const abrirCaixa = async () => {
     if (fundoTroco === '') return mostrarMensagem('Informe o fundo de troco inicial.', 'aviso');
     const { data, error } = await supabase.from('controle_caixa').insert([{ fundo_inicial: Number(fundoTroco), status: 'aberto' }]).select().single();
-    if (data && !error) { setCaixaAtual(data); setVendasHoje([]); setFundoTroco(''); mostrarMensagem('Caixa aberto com sucesso!', 'sucesso'); } 
+    if (data && !error) { setCaixaAtual(data); setVendasHoje([]); setMovimentacoesCaixa([]); setFundoTroco(''); mostrarMensagem('Caixa aberto com sucesso!', 'sucesso'); }
     else { mostrarMensagem('Erro ao abrir o caixa.', 'erro'); }
   };
 
   const confirmarFechamentoCaixa = async () => {
-    setModalConfirmacao(false);
+    if (valorFechamentoInput === '') return mostrarMensagem('Informe a quantidade de dinheiro físico contada na gaveta.', 'aviso');
     if (!caixaAtual) return;
-    const { error } = await supabase.from('controle_caixa').update({ status: 'fechado', data_fechamento: new Date().toISOString() }).eq('id', caixaAtual.id);
-    if (!error) { mostrarMensagem("Caixa fechado. Bom descanso!", 'sucesso'); setCaixaAtual(null); setVendasHoje([]); } 
-    else { mostrarMensagem("Erro ao fechar o caixa.", 'erro'); }
+
+    const { error } = await supabase.from('controle_caixa').update({
+      status: 'fechado',
+      data_fechamento: new Date().toISOString(),
+      valor_informado_fechamento: Number(valorFechamentoInput)
+    }).eq('id', caixaAtual.id);
+
+    if (!error) {
+      mostrarMensagem("Caixa fechado com conferência registrada. Bom descanso!", 'sucesso');
+      setCaixaAtual(null);
+      setVendasHoje([]);
+      setMovimentacoesCaixa([]);
+      setValorFechamentoInput('');
+      setModalConfirmacao(false);
+    } else {
+      mostrarMensagem("Erro ao fechar o caixa.", 'erro');
+    }
   };
 
   const confirmarCancelamentoVenda = async () => {
@@ -91,8 +111,8 @@ export default function DashboardModulo() {
       await supabase.from('vendas').delete().eq('id', vendaParaCancelar.id);
 
       mostrarMensagem('Venda cancelada e estoque restaurado.', 'sucesso');
-      buscarVendasDoCaixa(caixaAtual.data_abertura);
-    } catch (error) { mostrarMensagem('Erro ao cancelar a venda.', 'erro'); } 
+      buscarVendasDoCaixa(caixaAtual.data_abertura, caixaAtual.id);
+    } catch (error) { mostrarMensagem('Erro ao cancelar a venda.', 'erro'); }
     finally { setVendaParaCancelar(null); }
   };
 
@@ -150,7 +170,6 @@ export default function DashboardModulo() {
     if (totalPagoEdicao !== totalEdicao) return mostrarMensagem(`Ajuste os pagamentos! O total dos itens é ${formatarMoeda(totalEdicao)} mas os pagamentos somam ${formatarMoeda(totalPagoEdicao)}.`, 'erro');
 
     try {
-      // 1. Restaurar o estoque original da venda antiga (apenas revenda)
       for (const item of vendaEmEdicao.itens_venda) {
         const isReceita = produtosDisponiveis.find(p => p.id === item.produto_id)?.is_receita;
         if (!isReceita) {
@@ -159,7 +178,6 @@ export default function DashboardModulo() {
         }
       }
 
-      // 2. Descontar o estoque novo da edição atual
       for (const item of carrinhoEdicao) {
         if (!item.is_receita) {
           const { data: pData } = await supabase.from('produtos').select('quantidade_estoque').eq('id', item.produto_id).single();
@@ -167,7 +185,6 @@ export default function DashboardModulo() {
         }
       }
 
-      // 3. Atualizar Venda e Pagamentos
       let metodosUsados = [];
       if (editPix) metodosUsados.push('PIX');
       if (editDinheiro) metodosUsados.push('Dinheiro');
@@ -180,34 +197,117 @@ export default function DashboardModulo() {
         valor_cartao_credito: Number(editCredito) || 0, valor_cartao_debito: Number(editDebito) || 0
       }).eq('id', vendaEmEdicao.id);
 
-      // 4. Recriar os Itens da Venda
       await supabase.from('itens_venda').delete().eq('venda_id', vendaEmEdicao.id);
       const novosItens = carrinhoEdicao.map(item => ({
         venda_id: vendaEmEdicao.id, produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario
       }));
       await supabase.from('itens_venda').insert(novosItens);
 
-      // 5. Histórico de Movimentação (Auditoria)
       await supabase.from('movimentacoes_estoque').insert([{
-        produto_id: carrinhoEdicao[0].produto_id, 
-        quantidade: 0, tipo_movimento: 'Entrada - Ajuste/Auditoria', 
+        produto_id: carrinhoEdicao[0].produto_id,
+        quantidade: 0, tipo_movimento: 'Entrada - Ajuste/Auditoria',
         motivo: `Edição da Venda ${vendaEmEdicao.identificacao_pedido}`, atendente: vendaEmEdicao.atendente
       }]);
 
       mostrarMensagem('Venda atualizada com sucesso!', 'sucesso');
       setVendaEmEdicao(null);
-      buscarVendasDoCaixa(caixaAtual.data_abertura);
+      buscarVendasDoCaixa(caixaAtual.data_abertura, caixaAtual.id);
 
     } catch (error) { console.error(error); mostrarMensagem('Erro ao salvar a edição.', 'erro'); }
   };
 
   const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   const formatarHora = (dataIso: string) => new Date(dataIso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const formatarDataHoraCompleta = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-  // TELA DE LOADING
+  // Métricas de Turno declaradas de forma visível e unificada
+  const faturamentoTotal = useMemo(() => vendasHoje.reduce((acc, v) => acc + Number(v.total), 0), [vendasHoje]);
+  const totalPix = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_pix) || (v.metodo_pagamento === 'PIX' ? Number(v.total) : 0)), 0), [vendasHoje]);
+  const totalCartaoCred = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_credito) || 0) + (v.metodo_pagamento === 'Cartão de Crédito' ? Number(v.total) : 0), 0), [vendasHoje]);
+  const totalCartaoDeb = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_debito) || 0) + (v.metodo_pagamento === 'Cartão de Débito' ? Number(v.total) : 0), 0), [vendasHoje]);
+  const totalDinheiro = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_dinheiro) || (v.metodo_pagamento === 'Dinheiro' ? Number(v.total) : 0)), 0), [vendasHoje]);
+
+  const qtdVendas = vendasHoje.length;
+  const ticketMedio = qtdVendas > 0 ? faturamentoTotal / qtdVendas : 0;
+
+  const suprimentosTotais = useMemo(() => movimentacoesCaixa.filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + Number(m.valor), 0), [movimentacoesCaixa]);
+  const sangriasEDespesasTotais = useMemo(() => movimentacoesCaixa.filter(m => m.tipo === 'sangria' || m.tipo === 'despesa').reduce((acc, m) => acc + Number(m.valor), 0), [movimentacoesCaixa]);
+
+  const saldoFinalCaixa = caixaAtual ? caixaAtual.fundo_inicial + faturamentoTotal + suprimentosTotais - sangriasEDespesasTotais : 0;
+  const dinheiroEsperadoNaGaveta = caixaAtual ? caixaAtual.fundo_inicial + totalDinheiro + suprimentosTotais - sangriasEDespesasTotais : 0;
+
+  const handleImprimirResumo = () => {
+    const caixa = caixaAtual;
+    if (!caixa) return;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!doc) return;
+
+    doc.write(`
+      <html>
+        <head>
+          <title>Resumo de Fechamento de Caixa</title>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; padding: 15px; color: #000; max-width: 280px; margin: 0 auto; font-size: 12px; line-height: 1.4; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+            .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .flex { display: flex; justify-content: space-between; }
+            .header { font-size: 14px; margin-bottom: 4px; }
+            .section-title { font-weight: bold; margin-top: 12px; text-decoration: underline; }
+          </style>
+        </head>
+        <body>
+          <div class="text-center font-bold header">FECHAMENTO DE CAIXA</div>
+          <div class="text-center font-bold">-------------------------</div>
+          <div class="flex"><span>Abertura:</span> <span>${formatarDataHoraCompleta(caixa.data_abertura)}</span></div>
+          <div class="flex"><span>Operador:</span> <span>${vendasHoje[0]?.atendente || 'Administrador'}</span></div>
+          <div class="divider"></div>
+
+          <div class="section-title">MOVIMENTAÇÃO DA GAVETA</div>
+          <div class="flex"><span>(+) Fundo Inicial:</span> <span>${formatarMoeda(caixa.fundo_inicial)}</span></div>
+          <div class="flex"><span>(+) Vendas Dinheiro:</span> <span>${formatarMoeda(totalDinheiro)}</span></div>
+          <div class="flex"><span>(+) Suprimentos:</span> <span>${formatarMoeda(suprimentosTotais)}</span></div>
+          <div class="flex"><span>(-) Sangrias/Despesas:</span> <span>-${formatarMoeda(sangriasEDespesasTotais)}</span></div>
+          <div class="flex font-bold"><span>(=) Dinheiro em Caixa:</span> <span>${formatarMoeda(dinheiroEsperadoNaGaveta)}</span></div>
+          <div class="divider"></div>
+
+          <div class="section-title">FATURAMENTO DIGITAL</div>
+          <div class="flex"><span>📱 Via PIX:</span> <span>${formatarMoeda(totalPix)}</span></div>
+          <div class="flex"><span>💳 C. Crédito:</span> <span>${formatarMoeda(totalCartaoCred)}</span></div>
+          <div class="flex"><span>💳 C. Débito:</span> <span>${formatarMoeda(totalCartaoDeb)}</span></div>
+          <div class="divider"></div>
+
+          <div class="section-title">RESUMO DE VENDAS</div>
+          <div class="flex"><span>Total Pedidos:</span> <span>${qtdVendas}</span></div>
+          <div class="flex"><span>Ticket Médio:</span> <span>${formatarMoeda(ticketMedio)}</span></div>
+          <div class="flex font-bold" style="font-size:13px; margin-top:6px;"><span>FATURAMENTO TOTAL:</span> <span>${formatarMoeda(faturamentoTotal)}</span></div>
+          
+          <div class="text-center" style="margin-top: 40px;">-------------------------</div>
+          <div class="text-center">Assinatura do Responsável</div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      document.body.removeChild(iframe);
+    }, 200);
+  };
+
   if (carregando) return <div className="text-center py-10 font-bold text-cafe-primary animate-pulse">A carregar informações do caixa...</div>;
-  
-  // TELA DE CAIXA FECHADO
+
   if (!caixaAtual) {
     return (
       <div className="relative max-w-md mx-auto p-6 bg-cafe-card dark:bg-gray-800 rounded-lg shadow-md border border-cafe-secondary/20 dark:border-gray-700 my-12 text-center overflow-hidden transition-colors duration-300">
@@ -217,127 +317,112 @@ export default function DashboardModulo() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Para iniciar o dia e registar vendas, abra o caixa informando o fundo de troco atual da gaveta.</p>
         <div className="text-left mb-4">
           <label className="block text-sm font-semibold text-cafe-dark dark:text-gray-200 mb-1">Fundo de Troco (R$)</label>
-          <input type="number" className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-cafe-secondary text-center text-lg font-bold" value={fundoTroco} onChange={(e) => setFundoTroco(Number(e.target.value))} />
+          <input type="number" className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-cafe-secondary text-center text-lg font-bold" value={fundoTroco} onChange={(e) => setFundoTroco(e.target.value === '' ? '' : Number(e.target.value))} />
         </div>
         <button onClick={abrirCaixa} className="w-full bg-green-600 text-white font-bold py-3 rounded shadow hover:bg-green-700 active:scale-95">ABRIR CAIXA</button>
       </div>
     );
   }
 
-  const faturamentoTotal = vendasHoje.reduce((acc, v) => acc + Number(v.total), 0);
-  const totalPix = vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_pix) || (v.metodo_pagamento === 'PIX' ? Number(v.total) : 0)), 0);
-  const totalCartaoCred = vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_credito) || 0) + (v.metodo_pagamento === 'Cartão de Crédito' ? Number(v.total) : 0), 0);
-  const totalCartaoDeb = vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_debito) || 0) + (v.metodo_pagamento === 'Cartão de Débito' ? Number(v.total) : 0), 0);
-  const totalDinheiro = vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_dinheiro) || (v.metodo_pagamento === 'Dinheiro' ? Number(v.total) : 0)), 0);
-  const dinheiroEsperadoNaGaveta = caixaAtual.fundo_inicial + totalDinheiro;
+  // Atalho imutável para renderização segura do JSX após a verificação de nulo
+  const caixa = caixaAtual;
 
   return (
     <div className="relative max-w-6xl mx-auto p-6 bg-cafe-card dark:bg-gray-900 rounded-lg shadow-md border border-cafe-secondary/20 dark:border-gray-700 my-8 transition-colors duration-300">
-      
+
       {feedback.tipo && (<div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}><p className="text-sm font-semibold">{feedback.msg}</p></div>)}
 
-      {/* MODAL DE EDIÇÃO DE VENDA COMPLETO */}
-      {vendaEmEdicao && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
-            <div className="flex justify-between items-center mb-6 border-b dark:border-gray-700 pb-3">
-              <h3 className="text-xl font-bold text-cafe-primary dark:text-cafe-secondary">Editar Venda: {vendaEmEdicao.identificacao_pedido}</h3>
-              <button onClick={() => setVendaEmEdicao(null)} className="text-gray-500 hover:text-red-500 font-bold text-xl">X</button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Carrinho da Edição */}
+      {/* MODAL: RESUMO FINANCEIRO CLEAN E ORGANIZADO */}
+      {modalResumo && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden font-sans border border-gray-200 dark:border-gray-700 relative">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-between items-center">
               <div>
-                <h4 className="font-semibold mb-3 dark:text-gray-200">Itens do Pedido</h4>
-                <div className="flex gap-2 mb-4">
-                  <select className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 text-sm" value={produtoAddId} onChange={(e) => setProdutoAddId(e.target.value)}>
-                    <option value="">+ Adicionar Item...</option>
-                    {produtosDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome} - {formatarMoeda(p.preco_venda)}</option>)}
-                  </select>
-                  <button onClick={adicionarProdutoEdicao} className="bg-cafe-secondary text-cafe-dark font-bold px-3 rounded shadow-sm">Add</button>
-                </div>
-                
-                <ul className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                  {carrinhoEdicao.map(item => (
-                    <li key={item.produto_id} className="bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 flex justify-between items-center text-sm">
-                      <div>
-                        <span className="font-bold block dark:text-gray-100">{item.nome}</span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{formatarMoeda(item.preco_unitario)}</span>
-                      </div>
-                      <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm">
-                        <button onClick={() => alterarQtdEdicao(item.produto_id, -1)} className="font-bold text-cafe-primary dark:text-cafe-secondary px-2">-</button>
-                        <span className="font-bold w-4 text-center dark:text-gray-100">{item.quantidade}</span>
-                        <button onClick={() => alterarQtdEdicao(item.produto_id, 1)} className="font-bold text-cafe-primary dark:text-cafe-secondary px-2">+</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <h3 className="text-lg font-black text-gray-800 dark:text-white">Resumo do Turno</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Fechamento e conferência de valores</p>
+              </div>
+              <div className="flex gap-4 items-center">
+                <button onClick={handleImprimirResumo} className="hover:opacity-70 text-base transition p-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg" title="Imprimir Relatório">🖨️ Imprimir</button>
+                <button onClick={() => setModalResumo(false)} className="text-gray-400 hover:text-red-500 font-bold transition text-lg">×</button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5 text-sm max-h-[75vh] overflow-y-auto">
+              <div className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-700/50 p-3 rounded-xl border border-gray-100 dark:border-gray-600 flex justify-between">
+                <span>Abertura: <strong>{formatarDataHoraCompleta(caixa.data_abertura)}</strong></span>
+                <span>Op: <strong>{vendasHoje[0]?.atendente || 'Admin'}</strong></span>
               </div>
 
-              {/* Pagamentos da Edição */}
-              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border dark:border-gray-600">
-                <h4 className="font-semibold mb-4 border-b dark:border-gray-600 pb-2 dark:text-gray-200">Refazer Pagamentos</h4>
-                
-                <div className="flex justify-between items-center text-2xl font-black mb-4">
-                  <span className="dark:text-gray-100">Total:</span>
-                  <span className="text-blue-600 dark:text-blue-400">{formatarMoeda(totalEdicao)}</span>
-                </div>
+              <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-2.5 shadow-sm">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">💵 Movimentação da Gaveta</h4>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Saldo Inicial (Troco):</span><span className="font-medium">{formatarMoeda(caixa.fundo_inicial)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Vendas em Dinheiro:</span><span className="font-medium text-green-600">{formatarMoeda(totalDinheiro)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Suprimentos (Aportes):</span><span className="font-medium text-green-600">{formatarMoeda(suprimentosTotais)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(-) Sangrias / Despesas:</span><span className="font-medium text-red-500">-{formatarMoeda(sangriasEDespesasTotais)}</span></div>
+                <div className="flex justify-between font-bold pt-2 border-t text-gray-800 dark:text-white text-base"><span>= Dinheiro Esperado:</span><span className="text-cafe-primary dark:text-cafe-secondary">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span></div>
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">PIX</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editPix} onChange={(e) => setEditPix(Number(e.target.value))} /></div>
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Dinheiro</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editDinheiro} onChange={(e) => setEditDinheiro(Number(e.target.value))} /></div>
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Crédito</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editCredito} onChange={(e) => setEditCredito(Number(e.target.value))} /></div>
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Débito</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editDebito} onChange={(e) => setEditDebito(Number(e.target.value))} /></div>
-                </div>
+              <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-2.5 shadow-sm">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📱 Faturamento Digital (Outros Meios)</h4>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>📱 Via PIX:</span><span className="font-medium">{formatarMoeda(totalPix)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>💳 Cartão de Crédito:</span><span className="font-medium">{formatarMoeda(totalCartaoCred)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>💳 Cartão de Débito:</span><span className="font-medium">{formatarMoeda(totalCartaoDeb)}</span></div>
+              </div>
 
-                <div className={`mt-4 text-center font-bold text-sm p-2 rounded ${totalPagoEdicao === totalEdicao ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  Soma dos Pagamentos: {formatarMoeda(totalPagoEdicao)}
-                </div>
-
-                <button onClick={salvarEdicaoVenda} className="w-full bg-blue-600 text-white font-bold py-3 rounded mt-4 shadow hover:bg-blue-700 active:scale-95 transition">
-                  Salvar Alterações da Venda
-                </button>
+              <div className="bg-gray-900 text-white p-4 rounded-xl space-y-2.5 shadow-md">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📊 Indicadores Totais do Turno</h4>
+                <div className="flex justify-between text-gray-300"><span>Volume de Pedidos:</span><span className="font-bold">{qtdVendas} vendas</span></div>
+                <div className="flex justify-between text-gray-300"><span>Ticket Médio:</span><span className="font-bold">{formatarMoeda(ticketMedio)}</span></div>
+                <div className="flex justify-between font-black pt-2 border-t border-gray-800 text-lg text-green-400"><span>Faturamento Total:</span><span>{formatarMoeda(faturamentoTotal)}</span></div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de Cancelamento de Venda */}
-      {vendaParaCancelar && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-xl font-bold text-red-600 mb-2">Cancelar Venda Inteira</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">Deseja cancelar a venda <strong>{vendaParaCancelar.identificacao_pedido}</strong>? O valor será subtraído do caixa e o estoque restaurado.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setVendaParaCancelar(null)} className="flex-1 bg-gray-100 dark:bg-gray-700 dark:text-white rounded font-semibold transition">Voltar</button>
-              <button onClick={confirmarCancelamentoVenda} className="flex-1 bg-red-600 text-white py-2 rounded font-semibold shadow hover:bg-red-700">Sim, Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Fechamento Caixa */}
+      {/* MODAL: FECHAMENTO DE CAIXA COM AUDITORIA CEGA / QUEBRAS */}
       {modalConfirmacao && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-xl font-bold text-cafe-dark dark:text-gray-100 mb-2">Encerrar Dia</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">Tem a certeza que deseja fechar o caixa de hoje? Não poderá registar mais vendas neste turno.</p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 max-w-md w-full border dark:border-gray-700">
+            <h3 className="text-xl font-black text-gray-800 dark:text-white mb-2">Encerrar Turno e Conferir Caixa</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Insira abaixo o valor total em dinheiro que está fisicamente na gaveta agora.</p>
+
+            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl mb-5 text-sm space-y-1">
+              <div className="flex justify-between text-gray-500">
+                <span>Dinheiro Esperado em Sistema:</span>
+                <span className="font-bold text-gray-800 dark:text-gray-200">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Contado na Gaveta (R$)</label>
+              <input
+                type="number"
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-red-500 text-center text-2xl font-black"
+                value={valorFechamentoInput}
+                onChange={(e) => setValorFechamentoInput(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="0,00"
+              />
+            </div>
+
             <div className="flex gap-3">
-              <button onClick={() => setModalConfirmacao(false)} className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 dark:text-white rounded font-semibold transition">Cancelar</button>
-              <button onClick={confirmarFechamentoCaixa} className="flex-1 px-4 py-2 bg-red-600 text-white rounded font-semibold shadow hover:bg-red-700 transition">Sim, Fechar</button>
+              <button onClick={() => { setModalConfirmacao(false); setValorFechamentoInput(''); }} className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 dark:text-white rounded-xl font-semibold transition text-sm">Cancelar</button>
+              <button onClick={confirmarFechamentoCaixa} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-semibold shadow hover:bg-red-700 transition text-sm">Encerrar Caixa</button>
             </div>
           </div>
         </div>
       )}
 
       {/* DASHBOARD NORMAL */}
-      <div className="flex justify-between items-center mb-6 border-b border-cafe-secondary/30 pb-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-cafe-primary dark:text-cafe-secondary">Fechamento e Dashboard</h2>
           <p className="text-sm text-green-600 font-semibold mt-1">🟢 Caixa Aberto</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setModalResumo(true)} className="bg-white dark:bg-gray-700 text-cafe-dark dark:text-gray-100 border border-gray-300 dark:border-gray-500 px-4 py-2 rounded font-bold text-sm shadow-sm hover:bg-gray-50 active:scale-95 flex items-center gap-2">
+            📊 Resumo Financeiro
+          </button>
           <button onClick={() => verificarStatusCaixa()} className="bg-cafe-bg dark:bg-gray-800 text-cafe-dark dark:text-gray-100 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded font-bold text-sm shadow-sm hover:bg-gray-50 active:scale-95">Atualizar</button>
           <button onClick={() => setModalConfirmacao(true)} className="bg-red-600 text-white px-4 py-2 rounded font-bold text-sm shadow hover:bg-red-700 active:scale-95">Encerrar Dia</button>
         </div>
