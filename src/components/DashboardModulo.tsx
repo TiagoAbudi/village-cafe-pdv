@@ -220,21 +220,23 @@ export default function DashboardModulo() {
   const formatarHora = (dataIso: string) => new Date(dataIso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const formatarDataHoraCompleta = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-  // Métricas de Turno declaradas de forma visível e unificada
-  const faturamentoTotal = useMemo(() => vendasHoje.reduce((acc, v) => acc + Number(v.total), 0), [vendasHoje]);
   const totalPix = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_pix) || (v.metodo_pagamento === 'PIX' ? Number(v.total) : 0)), 0), [vendasHoje]);
   const totalCartaoCred = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_credito) || 0) + (v.metodo_pagamento === 'Cartão de Crédito' ? Number(v.total) : 0), 0), [vendasHoje]);
   const totalCartaoDeb = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_debito) || 0) + (v.metodo_pagamento === 'Cartão de Débito' ? Number(v.total) : 0), 0), [vendasHoje]);
   const totalDinheiro = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_dinheiro) || (v.metodo_pagamento === 'Dinheiro' ? Number(v.total) : 0)), 0), [vendasHoje]);
+  const faturamentoTotal = useMemo(() => vendasHoje.reduce((acc, v) => acc + Number(v.total), 0), [vendasHoje]);
 
+  const suprimentosTotais = useMemo(() => {
+    return movimentacoesCaixa.filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + Number(m.valor), 0);
+  }, [movimentacoesCaixa]);
+
+  const sangriasEDespesasTotais = useMemo(() => {
+    return movimentacoesCaixa.filter(m => m.tipo === 'sangria' || m.tipo === 'despesa').reduce((acc, m) => acc + Number(m.valor), 0);
+  }, [movimentacoesCaixa]);
+
+  const dinheiroEsperadoNaGaveta = caixaAtual ? caixaAtual.fundo_inicial + totalDinheiro + suprimentosTotais - sangriasEDespesasTotais : 0;
   const qtdVendas = vendasHoje.length;
   const ticketMedio = qtdVendas > 0 ? faturamentoTotal / qtdVendas : 0;
-
-  const suprimentosTotais = useMemo(() => movimentacoesCaixa.filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + Number(m.valor), 0), [movimentacoesCaixa]);
-  const sangriasEDespesasTotais = useMemo(() => movimentacoesCaixa.filter(m => m.tipo === 'sangria' || m.tipo === 'despesa').reduce((acc, m) => acc + Number(m.valor), 0), [movimentacoesCaixa]);
-
-  const saldoFinalCaixa = caixaAtual ? caixaAtual.fundo_inicial + faturamentoTotal + suprimentosTotais - sangriasEDespesasTotais : 0;
-  const dinheiroEsperadoNaGaveta = caixaAtual ? caixaAtual.fundo_inicial + totalDinheiro + suprimentosTotais - sangriasEDespesasTotais : 0;
 
   const handleImprimirResumo = () => {
     const caixa = caixaAtual;
@@ -324,7 +326,6 @@ export default function DashboardModulo() {
     );
   }
 
-  // Atalho imutável para renderização segura do JSX após a verificação de nulo
   const caixa = caixaAtual;
 
   return (
@@ -375,6 +376,85 @@ export default function DashboardModulo() {
                 <div className="flex justify-between text-gray-300"><span>Ticket Médio:</span><span className="font-bold">{formatarMoeda(ticketMedio)}</span></div>
                 <div className="flex justify-between font-black pt-2 border-t border-gray-800 text-lg text-green-400"><span>Faturamento Total:</span><span>{formatarMoeda(faturamentoTotal)}</span></div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIÇÃO DE VENDA */}
+      {vendaEmEdicao && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center mb-6 border-b dark:border-gray-700 pb-3">
+              <h3 className="text-xl font-bold text-cafe-primary dark:text-cafe-secondary">Editar Venda: {vendaEmEdicao.identificacao_pedido}</h3>
+              <button onClick={() => setVendaEmEdicao(null)} className="text-gray-500 hover:text-red-500 font-bold text-xl">X</button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div>
+                <h4 className="font-semibold mb-3 dark:text-gray-200">Itens do Pedido</h4>
+                <div className="flex gap-2 mb-4">
+                  <select className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 text-sm" value={produtoAddId} onChange={(e) => setProdutoAddId(e.target.value)}>
+                    <option value="">+ Adicionar Item...</option>
+                    {produtosDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome} - {formatarMoeda(p.preco_venda)}</option>)}
+                  </select>
+                  <button onClick={adicionarProdutoEdicao} className="bg-cafe-secondary text-cafe-dark font-bold px-3 rounded shadow-sm">Add</button>
+                </div>
+
+                <ul className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                  {carrinhoEdicao.map(item => (
+                    <li key={item.produto_id} className="bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 flex justify-between items-center text-sm">
+                      <div>
+                        <span className="font-bold block dark:text-gray-100">{item.nome}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{formatarMoeda(item.preco_unitario)}</span>
+                      </div>
+                      <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm">
+                        <button onClick={() => alterarQtdEdicao(item.produto_id, -1)} className="font-bold text-cafe-primary dark:text-cafe-secondary px-2">-</button>
+                        <span className="font-bold w-4 text-center dark:text-gray-100">{item.quantidade}</span>
+                        <button onClick={() => alterarQtdEdicao(item.produto_id, 1)} className="font-bold text-cafe-primary dark:text-cafe-secondary px-2">+</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border dark:border-gray-600">
+                <h4 className="font-semibold mb-4 border-b dark:border-gray-600 pb-2 dark:text-gray-200">Refazer Pagamentos</h4>
+
+                <div className="flex justify-between items-center text-2xl font-black mb-4">
+                  <span className="dark:text-gray-100">Total:</span>
+                  <span className="text-blue-600 dark:text-blue-400">{formatarMoeda(totalEdicao)}</span>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">PIX</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editPix} onChange={(e) => setEditPix(Number(e.target.value))} /></div>
+                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Dinheiro</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editDinheiro} onChange={(e) => setEditDinheiro(Number(e.target.value))} /></div>
+                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Crédito</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editCredito} onChange={(e) => setEditCredito(Number(e.target.value))} /></div>
+                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Débito</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editDebito} onChange={(e) => setEditDebito(Number(e.target.value))} /></div>
+                </div>
+
+                <div className={`mt-4 text-center font-bold text-sm p-2 rounded ${totalPagoEdicao === totalEdicao ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  Soma dos Pagamentos: {formatarMoeda(totalPagoEdicao)}
+                </div>
+
+                <button onClick={salvarEdicaoVenda} className="w-full bg-blue-600 text-white font-bold py-3 rounded mt-4 shadow hover:bg-blue-700 active:scale-95 transition">
+                  Salvar Alterações da Venda
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CANCELAMENTO DE VENDA */}
+      {vendaParaCancelar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
+            <h3 className="text-xl font-bold text-red-600 mb-2">Cancelar Venda Inteira</h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">Deseja cancelar a venda <strong>{vendaParaCancelar.identificacao_pedido}</strong>? O valor será subtraído do caixa e o estoque restaurado.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setVendaParaCancelar(null)} className="flex-1 bg-gray-100 dark:bg-gray-700 dark:text-white rounded font-semibold transition">Voltar</button>
+              <button onClick={confirmarCancelamentoVenda} className="flex-1 bg-red-600 text-white py-2 rounded font-semibold shadow hover:bg-red-700">Sim, Cancelar</button>
             </div>
           </div>
         </div>
@@ -482,6 +562,11 @@ export default function DashboardModulo() {
                   </td>
                 </tr>
               ))}
+              {vendasHoje.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-gray-500 italic">Nenhuma venda registrada neste turno.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
