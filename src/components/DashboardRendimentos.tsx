@@ -108,8 +108,6 @@ export default function DashboardRendimentos() {
         let totalDebito = 0;
 
         const contagemProdutos: { [key: string]: { qtd: number; fat: number; custo: number } } = {};
-
-        // ADICIONADO: rastrear o custo diário também
         const vendasPorDia: Record<string, { valor: number, qtd: number, custo: number }> = {};
 
         vendas.forEach((venda) => {
@@ -131,7 +129,6 @@ export default function DashboardRendimentos() {
                 lucroTotal += (precoVendaItem - precoCustoItem);
                 custoTotal += precoCustoItem;
 
-                // ADICIONADO: somando custo diário
                 vendasPorDia[diaStr].custo += precoCustoItem;
 
                 const nomeProd = item.produtos?.nome || 'Produto Removido';
@@ -166,8 +163,8 @@ export default function DashboardRendimentos() {
             return {
                 dataCurta: `${d}/${mes}`,
                 valor: valorDia,
-                custo: custoDia, // ADICIONADO para o tooltip
-                lucro: valorDia - custoDia, // ADICIONADO para o tooltip
+                custo: custoDia,
+                lucro: valorDia - custoDia,
                 qtd: vendasPorDia[dia].qtd
             };
         });
@@ -319,12 +316,12 @@ export default function DashboardRendimentos() {
                         </div>
                     </div>
 
-                    {/* GRÁFICO DE LINHAS */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-6 relative z-0">
-                        <h3 className="font-bold text-gray-700 mb-2 text-sm uppercase tracking-wide">Evolução do Faturamento</h3>
+                    {/* GRÁFICO DE LINHAS COM FUNDO PRETO ATUALIZADO */}
+                    <div className="bg-gray-950 p-6 rounded-xl shadow-sm border border-gray-800 mt-6 relative z-0">
+                        <h3 className="font-bold text-gray-400 mb-2 text-sm uppercase tracking-wide">Evolução do Faturamento</h3>
 
                         {pts.length === 0 ? (
-                            <p className="text-center text-gray-400 py-10 italic">Sem vendas registradas neste período.</p>
+                            <p className="text-center text-gray-500 py-10 italic">Sem vendas registradas neste período.</p>
                         ) : (
                             <div className="w-full relative pb-4 pt-4">
                                 <div className="w-full overflow-x-auto custom-scrollbar relative">
@@ -340,7 +337,6 @@ export default function DashboardRendimentos() {
                                             >
                                                 <div className="font-black text-xs text-center border-b border-gray-700 pb-1 mb-2">{tooltip.p.dataCurta}</div>
 
-                                                {/* INFORMAÇÕES ATUALIZADAS NO TOOLTIP */}
                                                 <div className="space-y-1">
                                                     <div className="flex justify-between items-center text-xs text-gray-300">
                                                         <span>Bruto:</span>
@@ -373,9 +369,10 @@ export default function DashboardRendimentos() {
                                                 </linearGradient>
                                             </defs>
 
+                                            {/* Ajustado as linhas de grade para um cinza escuro sutil sobre o fundo preto */}
                                             {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
                                                 const yPos = padYTop + (usableHeight * ratio);
-                                                return <line key={idx} x1={padX} y1={yPos} x2={svgWidth - padX} y2={yPos} stroke="#f3f4f6" strokeWidth="1" strokeDasharray="4 4" />
+                                                return <line key={idx} x1={padX} y1={yPos} x2={svgWidth - padX} y2={yPos} stroke="#1f2937" strokeWidth="1" strokeDasharray="4 4" />
                                             })}
 
                                             {pts.length > 1 && <path d={pathArea} fill="url(#gradientLinha)" />}
@@ -390,7 +387,7 @@ export default function DashboardRendimentos() {
                                                     className="cursor-crosshair outline-none"
                                                 >
                                                     {tooltip.visivel && tooltip.p?.dataCurta === p.dataCurta && (
-                                                        <line x1={p.x} y1={padYTop} x2={p.x} y2={padYBot} stroke="#9ca3af" strokeWidth="1" strokeDasharray="2 2" />
+                                                        <line x1={p.x} y1={padYTop} x2={p.x} y2={padYBot} stroke="#4b5563" strokeWidth="1" strokeDasharray="2 2" />
                                                     )}
 
                                                     <text x={p.x} y={padYBot + 25} textAnchor="middle" fill="#9ca3af" fontSize="10" fontWeight="bold">{p.dataCurta}</text>
