@@ -19,6 +19,7 @@ interface CadastroRevendaProps {
 export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
+  const [carregando, setCarregando] = useState(false);
 
   // Estados do Formulário de Cadastro
   const [nome, setNome] = useState('');
@@ -33,13 +34,18 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
   const [produtoParaApagar, setProdutoParaApagar] = useState<string | null>(null);
 
-  // Estados para o Ajuste de Estoque (Auditoria)
+  // Estados para o Ajuste de Estoque (Auditoria Individual)
   const [produtoParaAjuste, setProdutoParaAjuste] = useState<Produto | null>(null);
   const [ajusteTipo, setAjusteTipo] = useState('Entrada - Reposição');
   const [ajusteQuantidade, setAjusteQuantidade] = useState<number | ''>('');
   const [ajusteMotivo, setAjusteMotivo] = useState('');
 
-  // NOVO: Estados para a Edição Completa do Produto
+  // ESTADOS PARA ENTRADA EM LOTE (EM MASSA)
+  const [modalLoteOpen, setModalLoteOpen] = useState(false);
+  const [valoresLote, setValoresLote] = useState<Record<string, number | ''>>({});
+  const [termoBuscaLote, setTermoBuscaLote] = useState(''); // NOVO: Busca dentro do Lote
+
+  // Estados para a Edição Completa do Produto
   const [produtoParaEditar, setProdutoParaEditar] = useState<Produto | null>(null);
   const [editNome, setEditNome] = useState('');
   const [editPrecoCusto, setEditPrecoCusto] = useState<number | ''>('');
@@ -51,9 +57,14 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   // Estado para o campo de busca
   const [termoBusca, setTermoBusca] = useState('');
 
-  // Lógica de filtro para a tabela
+  // Lógica de filtro para a tabela principal
   const produtosFiltrados = produtos.filter(produto =>
     produto.nome.toLowerCase().includes(termoBusca.toLowerCase())
+  );
+
+  // Lógica de filtro para o modal de Lote
+  const produtosFiltradosLote = produtos.filter(produto =>
+    produto.nome.toLowerCase().includes(termoBuscaLote.toLowerCase())
   );
 
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
@@ -62,28 +73,23 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   };
 
   const carregarDados = async () => {
-    // 1. Busca as Fichas Técnicas para saber quais produtos são receitas (feitos na hora)
     const { data: fichas } = await supabase.from('fichas_tecnicas').select('produto_venda_id');
     const produtosComReceita = new Set(fichas?.map(f => f.produto_venda_id) || []);
 
-    // 2. Carrega Produtos Ativos do tipo 'venda'
     const { data: prodData } = await supabase.from('produtos')
       .select('*').eq('tipo', 'venda').eq('ativo', true).order('nome');
 
-    // 3. Carrega as Movimentações
     const { data: movData } = await supabase.from('movimentacoes_estoque')
       .select('id, quantidade, tipo_movimento, motivo, atendente, created_at, produto_id, produtos!inner(nome, unidade_medida, tipo)')
       .eq('produtos.tipo', 'venda')
       .order('created_at', { ascending: false }).limit(50);
 
-    // 4. Aplica o filtro mágico: Guarda APENAS o que NÃO está no Set de receitas
     if (prodData) {
       const apenasRevendaPura = prodData.filter(p => !produtosComReceita.has(p.id));
       setProdutos(apenasRevendaPura);
     }
 
     if (movData) {
-      // Limpa também o histórico para não mostrar movimentos acidentais de produtos com receita
       const movPuros = (movData as any[]).filter(m => !produtosComReceita.has(m.produto_id));
       setMovimentacoes(movPuros as unknown as Movimentacao[]);
     }
@@ -134,7 +140,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     if (!produtoParaAjuste || !ajusteQuantidade || !ajusteTipo) return mostrarMensagem('Preencha a quantidade e o tipo.', 'aviso');
 
     let novoEstoque = 0;
-    const isSaida = ajusteTipo.includes('Saída');
+    const isSaida = ajusteTipo.includes('Saída') || ajusteTipo.includes('Negativa');
 
     if (isSaida) {
       novoEstoque = produtoParaAjuste.quantidade_estoque - Number(ajusteQuantidade);
@@ -146,7 +152,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       const { error: erroUpdate } = await supabase.from('produtos').update({ quantidade_estoque: novoEstoque }).eq('id', produtoParaAjuste.id);
       if (erroUpdate) throw erroUpdate;
 
-      // ATUALIZADO: Captura do erro do insert
       const { error: erroMov } = await supabase.from('movimentacoes_estoque').insert([{
         produto_id: produtoParaAjuste.id,
         quantidade: isSaida ? -Number(ajusteQuantidade) : Number(ajusteQuantidade),
@@ -154,20 +159,53 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         motivo: ajusteMotivo || 'Ajuste Manual',
         atendente
       }]);
-      if (erroMov) throw erroMov; // <--- ADICIONE ESTA LINHA
+      if (erroMov) throw erroMov;
 
       mostrarMensagem(`Estoque atualizado e registado!`, 'sucesso');
       carregarDados();
     } catch (error) {
       console.error(error);
       mostrarMensagem('Erro ao atualizar o estoque.', 'erro');
-    }
-    finally {
+    } finally {
       setProdutoParaAjuste(null); setAjusteQuantidade(''); setAjusteMotivo(''); setAjusteTipo('Entrada - Reposição');
     }
   };
 
-  // NOVO: Funções de Edição Completa
+  // LÓGICA DE SALVAMENTO DAS ENTRADAS EM MASSA
+  const salvarEntradasEmLote = async () => {
+    const itensFiltrados = Object.entries(valoresLote).filter(([_, qtd]) => Number(qtd) > 0);
+    if (itensFiltrados.length === 0) return mostrarMensagem('Preencha a quantidade de pelo menos um produto.', 'aviso');
+
+    setCarregando(true);
+    try {
+      for (const [id, qtd] of itensFiltrados) {
+        const prod = produtos.find(p => p.id === id);
+        if (!prod) continue;
+
+        const novoEstoque = prod.quantidade_estoque + Number(qtd);
+
+        await supabase.from('produtos').update({ quantidade_estoque: novoEstoque }).eq('id', id);
+        await supabase.from('movimentacoes_estoque').insert([{
+          produto_id: id,
+          quantidade: Number(qtd),
+          tipo_movimento: 'Ajuste - Entrada Coletiva',
+          motivo: 'Lançamento Rápido em Lote',
+          atendente
+        }]);
+      }
+
+      mostrarMensagem('Estoque de todos os produtos atualizado com sucesso!', 'sucesso');
+      setValoresLote({});
+      setTermoBuscaLote('');
+      setModalLoteOpen(false);
+      carregarDados();
+    } catch (error) {
+      mostrarMensagem('Erro ao registrar entrada em lote.', 'erro');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
   const abrirModalEdicao = (produto: Produto) => {
     setProdutoParaEditar(produto);
     setEditNome(produto.nome);
@@ -209,6 +247,70 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         </div>
       )}
 
+      {/* MODAL: ENTRADA COLETIVA DE PRODUTOS EM LOTE */}
+      {modalLoteOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden border">
+            <div className="p-5 bg-gray-50 border-b flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black text-gray-800">📥 Lançamento Rápido (Entrada em Lote)</h3>
+                <p className="text-xs text-gray-400">Insira as quantidades de reabastecimento direto de uma só vez</p>
+              </div>
+              <button onClick={() => { setModalLoteOpen(false); setValoresLote({}); setTermoBuscaLote(''); }} className="text-gray-400 hover:text-red-500 font-bold text-xl">×</button>
+            </div>
+
+            {/* CAMPO DE PESQUISA DO MODAL */}
+            <div className="px-6 pt-4 pb-2 border-b border-gray-100 bg-white">
+              <input
+                type="text"
+                placeholder="Pesquisar produto na lista..."
+                className="w-full p-2.5 border border-gray-300 rounded-lg outline-none text-sm focus:border-cafe-primary transition-colors bg-gray-50"
+                value={termoBuscaLote}
+                onChange={(e) => setTermoBuscaLote(e.target.value)}
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {produtosFiltradosLote.map((p) => (
+                <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/50 transition">
+                  <div className="flex-1 min-w-0 pr-3">
+                    <span className="font-bold block text-gray-800 truncate">{p.nome}</span>
+                    <span className="text-xs text-gray-400 font-medium">Estoque atual: {p.quantidade_estoque || 0} {p.unidade_medida}</span>
+                  </div>
+                  <div className="w-32 flex items-center gap-2">
+                    <span className="text-xs font-black text-gray-400">+</span>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="0"
+                      className="w-full p-2 border rounded-lg text-center font-bold outline-none text-sm focus:border-cafe-primary bg-white"
+                      value={valoresLote[p.id] || ''}
+                      onChange={(e) => setValoresLote({ ...valoresLote, [p.id]: e.target.value === '' ? '' : Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              ))}
+              {produtosFiltradosLote.length === 0 && (
+                <div className="text-center text-gray-500 italic text-sm py-10">
+                  Nenhum produto correspondente encontrado.
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t flex gap-3">
+              <button onClick={() => { setModalLoteOpen(false); setValoresLote({}); setTermoBuscaLote(''); }} className="flex-1 py-2.5 bg-white border rounded-xl font-semibold text-sm transition hover:bg-gray-100">Cancelar</button>
+              <button
+                onClick={salvarEntradasEmLote}
+                disabled={carregando}
+                className="flex-1 py-2.5 bg-green-600 text-white font-bold rounded-xl text-sm shadow hover:bg-green-700 transition disabled:opacity-50"
+              >
+                {carregando ? 'A processar estoque...' : 'Confirmar Lote'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Exclusão */}
       {produtoParaApagar && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -235,7 +337,8 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                 <label className="block text-sm font-semibold mb-1">Tipo de Movimento</label>
                 <select className="w-full p-2 border rounded bg-white outline-none" value={ajusteTipo} onChange={(e) => setAjusteTipo(e.target.value)}>
                   <option value="Entrada - Reposição">🟢 Entrada (Reposição/Compra)</option>
-                  <option value="Entrada - Sobra">🟢 Entrada (Ajuste Positivo)</option>
+                  <option value="Ajuste - Correção (Entrada)">⚠️ Ajuste (Correção Positiva / Testes)</option>
+                  <option value="Ajuste - Correção (Saída)">⚠️ Ajuste (Correção Negativa / Testes)</option>
                   <option value="Saída - Quebra/Desperdício">🔴 Saída (Quebra/Desperdício)</option>
                   <option value="Saída - Vencimento">🔴 Saída (Vencimento)</option>
                   <option value="Saída - Consumo Interno">🔴 Saída (Consumo Interno)</option>
@@ -243,19 +346,19 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-1">Qtd a {ajusteTipo.includes('Saída') ? 'Remover' : 'Adicionar'}</label>
+                <label className="block text-sm font-semibold mb-1">Qtd a {ajusteTipo.includes('Saída') || ajusteTipo.includes('Negativa') ? 'Remover' : 'Adicionar'}</label>
                 <input type="number" min="1" className="w-full p-2 border rounded outline-none font-bold text-center" value={ajusteQuantidade} onChange={(e) => setAjusteQuantidade(Number(e.target.value))} autoFocus />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold mb-1">Motivo (Opcional)</label>
-                <input type="text" placeholder="Ex: Produto com defeito" className="w-full p-2 border rounded outline-none text-sm" value={ajusteMotivo} onChange={(e) => setAjusteMotivo(e.target.value)} />
+                <input type="text" placeholder="Ex: Produto de testes..." className="w-full p-2 border rounded outline-none text-sm" value={ajusteMotivo} onChange={(e) => setAjusteMotivo(e.target.value)} />
               </div>
             </div>
 
             <div className="flex gap-3">
               <button onClick={() => { setProdutoParaAjuste(null); setAjusteQuantidade(''); setAjusteMotivo(''); setAjusteTipo('Entrada - Reposição'); }} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-semibold transition">Cancelar</button>
-              <button onClick={confirmarAjusteEstoque} className={`flex-1 px-4 py-2 text-white rounded font-semibold transition shadow ${ajusteTipo.includes('Saída') ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
+              <button onClick={confirmarAjusteEstoque} className={`flex-1 px-4 py-2 text-white rounded font-semibold transition shadow ${ajusteTipo.includes('Ajuste') ? 'bg-amber-500 hover:bg-amber-600' : ajusteTipo.includes('Saída') ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
                 Confirmar
               </button>
             </div>
@@ -263,7 +366,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         </div>
       )}
 
-      {/* NOVO: Modal de Edição Completa do Produto */}
+      {/* Modal de Edição Completa do Produto */}
       {produtoParaEditar && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
@@ -346,17 +449,24 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         </div>
 
         {/* Lista de Produtos Ativos */}
-        {/* Lista de Produtos Ativos */}
         <div className="lg:col-span-2">
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 mb-3">
             <h3 className="font-semibold">Produtos Ativos</h3>
-            <input
-              type="text"
-              placeholder="Buscar produto..."
-              className="p-2 border border-gray-300 rounded outline-none text-sm w-full max-w-xs focus:border-cafe-primary transition-colors"
-              value={termoBusca}
-              onChange={(e) => setTermoBusca(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModalLoteOpen(true)}
+                className="bg-green-600 text-white font-bold text-xs px-3 py-2 rounded shadow-sm hover:bg-green-700 transition whitespace-nowrap h-[38px]"
+              >
+                📥 Entrada em Lote
+              </button>
+              <input
+                type="text"
+                placeholder="Buscar produto..."
+                className="p-2 border border-gray-300 rounded outline-none text-sm w-full max-w-xs focus:border-cafe-primary transition-colors h-[38px]"
+                value={termoBusca}
+                onChange={(e) => setTermoBusca(e.target.value)}
+              />
+            </div>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-auto h-[420px]">
             <table className="w-full text-left border-collapse min-w-max relative">
@@ -378,7 +488,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                     </td>
                     <td className="p-3 font-bold text-green-600">{formatarMoeda(p.preco_venda)}</td>
                     <td className="p-3 text-center space-x-3">
-                      {/* ATUALIZADO: Agora temos o botão 'Estoque' (verde) e o botão 'Editar' (azul) */}
                       <button onClick={() => setProdutoParaAjuste(p)} className="text-green-600 hover:text-green-800 font-bold text-xs" title="Auditoria de Estoque">Estoque</button>
                       <button onClick={() => abrirModalEdicao(p)} className="text-blue-600 hover:text-blue-800 font-bold text-xs" title="Editar Cadastro">Editar</button>
                       <button onClick={() => setProdutoParaApagar(p.id)} className="text-red-500 hover:text-red-700 font-bold text-lg" title="Remover">x</button>
@@ -414,14 +523,19 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
             </thead>
             <tbody>
               {movimentacoes.map(mov => {
+                const isAjuste = mov.tipo_movimento.includes('Ajuste');
                 const isEntrada = mov.tipo_movimento.includes('Entrada');
                 return (
                   <tr key={mov.id} className="border-b hover:bg-gray-50">
                     <td className="p-3 text-gray-500 text-xs">{formatarData(mov.created_at)}</td>
                     <td className="p-3 font-medium text-cafe-dark">{mov.produtos?.nome}</td>
-                    <td className="p-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${isEntrada ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{mov.tipo_movimento}</span></td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${isAjuste ? 'bg-amber-100 text-amber-800 border border-amber-200' : isEntrada ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {mov.tipo_movimento}
+                      </span>
+                    </td>
                     <td className="p-3 text-gray-500 text-xs max-w-[200px] truncate" title={mov.motivo}>{mov.motivo}</td>
-                    <td className={`p-3 font-bold ${isEntrada ? 'text-green-600' : 'text-red-600'}`}>{mov.quantidade > 0 ? '+' : ''}{mov.quantidade} <span className="text-xs font-normal text-gray-500">un</span></td>
+                    <td className={`p-3 font-bold ${isAjuste ? 'text-amber-600' : isEntrada ? 'text-green-600' : 'text-red-600'}`}>{mov.quantidade > 0 ? '+' : ''}{mov.quantidade} <span className="text-xs font-normal text-gray-500">un</span></td>
                     <td className="p-3 text-xs text-gray-600 font-semibold">{mov.atendente}</td>
                   </tr>
                 )
