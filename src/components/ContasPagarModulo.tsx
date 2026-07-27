@@ -22,7 +22,6 @@ export default function ContasPagarModulo() {
 
     // Estados do Caixa e Movimentações do Turno Atual
     const [caixaAtivo, setCaixaAtivo] = useState<any | null>(null);
-    // const [dinheiroEmCaixa, setDinheiroEmCaixa] = useState<number>(0);
     const [vendasHoje, setVendasHoje] = useState<any[]>([]);
     const [movimentacoesCaixa, setMovimentacoesCaixa] = useState<any[]>([]);
 
@@ -92,7 +91,7 @@ export default function ContasPagarModulo() {
 
             const { data: vendasData } = await supabase
                 .from('vendas')
-                .select('total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento')
+                .select('total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento, data_venda, id')
                 .gte('data_venda', caixaData.data_abertura);
             setVendasHoje(vendasData || []);
 
@@ -115,7 +114,6 @@ export default function ContasPagarModulo() {
 
     const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
     const formatarData = (dataIso: string) => {
-        // Se dataIso já for 'YYYY-MM-DD', não crie um objeto Date, apenas manipule a string
         if (!dataIso) return '-';
         const [ano, mes, dia] = dataIso.split('-');
         return `${dia}/${mes}/${ano}`;
@@ -145,17 +143,11 @@ export default function ContasPagarModulo() {
             } else {
                 const metodo = String(v.metodo_pagamento || '').trim().toLowerCase();
 
-                if (metodo.includes('pix')) {
-                    pix += vTotal;
-                } else if (metodo.includes('dinheiro')) {
-                    din += vTotal;
-                } else if (metodo.includes('crédito') || metodo.includes('credito')) {
-                    cred += vTotal;
-                } else if (metodo.includes('débito') || metodo.includes('debito')) {
-                    deb += vTotal;
-                } else {
-                    din += vTotal;
-                }
+                if (metodo.includes('pix')) pix += vTotal;
+                else if (metodo.includes('dinheiro')) din += vTotal;
+                else if (metodo.includes('crédito') || metodo.includes('credito')) cred += vTotal;
+                else if (metodo.includes('débito') || metodo.includes('debito')) deb += vTotal;
+                else din += vTotal;
             }
         });
         return { pix, din, cred, deb, total };
@@ -174,24 +166,16 @@ export default function ContasPagarModulo() {
 
         const contasPagas = contas
             .filter(c => c.status === 'Pago')
-            .sort((a, b) => {
-                // Compara as strings de data diretamente (YYYY-MM-DD)
-                return b.data_pagamento!.localeCompare(a.data_pagamento!);
-            });
+            .sort((a, b) => b.data_pagamento!.localeCompare(a.data_pagamento!));
 
         const totalPendente = contasPendentes.reduce((acc, c) => acc + c.valor, 0);
 
-        // Data de hoje no formato YYYY-MM-DD (sem considerar fuso horário)
         const hojeStr = new Date().toISOString().split('T')[0];
-
-        // Agora a comparação é de string com string, sem erro de fuso horário
         const contasPagasHoje = contasPagas.filter(c => c.data_pagamento === hojeStr);
         const totalPagasHoje = contasPagasHoje.reduce((acc, c) => acc + c.valor, 0);
 
         let balancoGeralTurno = 0;
-        if (caixaAtivo) {
-            balancoGeralTurno = totaisVendas.total - totalPagasHoje;
-        }
+        if (caixaAtivo) balancoGeralTurno = totaisVendas.total - totalPagasHoje;
 
         return { contasPendentes, contasPagas, totalPendente, totalPagasHoje, balancoGeralTurno };
     }, [contas, totaisVendas.total, caixaAtivo]);
@@ -210,11 +194,17 @@ export default function ContasPagarModulo() {
         try {
             const dataFimFiltro = caixa.data_fechamento || new Date().toISOString();
 
-            const { data: vendas } = await supabase.from('vendas').select('*').gte('data_venda', caixa.data_abertura).lte('data_venda', dataFimFiltro);
-            const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixa.id);
+            const { data: vendas } = await supabase.from('vendas').select('*').gte('data_venda', caixa.data_abertura).lte('data_venda', dataFimFiltro).order('data_venda', { ascending: true });
+
+            // CORREÇÃO: Utilizando a coluna 'data_movimento' correta que consta no seu banco de dados
+            const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixa.id).order('data_movimento', { ascending: true });
 
             const vHoje = vendas || [];
             const mHoje = movs || [];
+
+            // Separando as movimentações para as listas detalhadas
+            const listaSuprimentos = mHoje.filter(m => m.tipo === 'suprimento');
+            const listaSangrias = mHoje.filter(m => m.tipo === 'sangria' || m.tipo === 'despesa');
 
             const vTotal = vHoje.reduce((acc, v) => acc + Number(v.total), 0);
 
@@ -237,8 +227,8 @@ export default function ContasPagarModulo() {
                 }
             });
 
-            const suprimentos = mHoje.filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + Number(m.valor), 0);
-            const sangriasEDespesas = mHoje.filter(m => m.tipo === 'sangria' || m.tipo === 'despesa').reduce((acc, m) => acc + Number(m.valor), 0);
+            const suprimentos = listaSuprimentos.reduce((acc, m) => acc + Number(m.valor), 0);
+            const sangriasEDespesas = listaSangrias.reduce((acc, m) => acc + Number(m.valor), 0);
 
             const dinheiroEsperado = caixa.fundo_inicial + vDinheiro + suprimentos - sangriasEDespesas;
             const valorFechamentoReal = caixa.valor_informado_fechamento || 0;
@@ -255,7 +245,11 @@ export default function ContasPagarModulo() {
                 sangrias: sangriasEDespesas,
                 dinheiroEsperado,
                 valorFechamentoReal,
-                diferenca
+                diferenca,
+                // Listas detalhadas para a UI
+                listaVendas: vHoje,
+                listaSuprimentos,
+                listaSangrias
             });
         } catch (err) {
             console.error(err);
@@ -278,6 +272,27 @@ export default function ContasPagarModulo() {
 
         const doc = iframe.contentWindow?.document || iframe.contentDocument;
         if (!doc) return;
+
+        // Gerando HTML das listas para impressão
+        let detalhesHtml = '';
+        if (detalhesRelatorio.listaSuprimentos.length > 0) {
+            detalhesHtml += `<div class="line"></div><div class="font-bold text-center" style="margin:4px 0;">+ SUPRIMENTOS DETALHADOS</div>`;
+            detalhesRelatorio.listaSuprimentos.forEach((item: any) => {
+                detalhesHtml += `<div class="row" style="font-size:10px;"><span>${item.descricao}</span><span>${formatarMoeda(item.valor)}</span></div>`;
+            });
+        }
+        if (detalhesRelatorio.listaSangrias.length > 0) {
+            detalhesHtml += `<div class="line"></div><div class="font-bold text-center" style="margin:4px 0;">- SANGRIAS/DESPESAS DET.</div>`;
+            detalhesRelatorio.listaSangrias.forEach((item: any) => {
+                detalhesHtml += `<div class="row" style="font-size:10px;"><span>${item.descricao}</span><span>${formatarMoeda(item.valor)}</span></div>`;
+            });
+        }
+        if (detalhesRelatorio.listaVendas.length > 0) {
+            detalhesHtml += `<div class="line"></div><div class="font-bold text-center" style="margin:4px 0;">🧾 VENDAS (ENTRADAS)</div>`;
+            detalhesRelatorio.listaVendas.forEach((item: any) => {
+                detalhesHtml += `<div class="row" style="font-size:10px;"><span>Venda #${item.id.split('-')[0]} (${item.metodo_pagamento || 'Misto'})</span><span>${formatarMoeda(item.total)}</span></div>`;
+            });
+        }
 
         doc.write(`
           <html>
@@ -319,10 +334,13 @@ export default function ContasPagarModulo() {
               <div class="row"><span>📱 Total PIX:</span> <span>${formatarMoeda(detalhesRelatorio.totalPix)}</span></div>
               <div class="row"><span>💳 Cartão Crédito:</span> <span>${formatarMoeda(detalhesRelatorio.totalCredito)}</span></div>
               <div class="row"><span>💳 Cartão Débito:</span> <span>${formatarMoeda(detalhesRelatorio.totalDebito)}</span></div>
+              
               <div class="line"></div>
-
               <div class="row"><span>Qtd Vendas:</span> <span>${detalhesRelatorio.qtdVendas}</span></div>
               <div class="row font-bold" style="font-size:13px; margin-top:4px;"><span>FATURAMENTO BRUTO:</span> <span>${formatarMoeda(detalhesRelatorio.faturamentoTotal)}</span></div>
+              
+              ${detalhesHtml}
+
               <div class="text-center" style="margin-top:35px;">------------------------</div>
               <div class="text-center">Assinatura do Conferente</div>
             </body>
@@ -519,22 +537,22 @@ export default function ContasPagarModulo() {
                 </div>
             )}
 
-            {/* MODAL: HISTÓRICO DE TURNOS - APERTURA, FECHAMENTO E CONFERÊNCIA */}
+            {/* MODAL: HISTÓRICO DE TURNOS */}
             {modalHistoricoOpen && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700">
 
                         <div className="p-5 bg-gray-50 dark:bg-gray-900 border-b flex justify-between items-center">
                             <div>
                                 <h3 className="text-lg font-black text-gray-800 dark:text-white">Auditoria e Histórico de Turnos</h3>
-                                <p className="text-xs text-gray-400">Inspecione relatórios de abertura, fechamento e quebras de caixa</p>
+                                <p className="text-xs text-gray-400">Inspecione relatórios de abertura, fechamento e detalhamento de entradas e saídas</p>
                             </div>
-                            <button onClick={() => setModalHistoricoOpen(false)} className="text-gray-400 hover:text-red-500 font-bold text-xl">×</button>
+                            <button onClick={() => setModalHistoricoOpen(false)} className="text-gray-400 hover:text-red-500 font-bold text-2xl">×</button>
                         </div>
 
                         <div className="flex-1 flex overflow-hidden">
                             {/* Lateral Esquerda: Turnos */}
-                            <div className="w-1/3 border-r overflow-y-auto bg-gray-50/50">
+                            <div className="w-1/3 border-r overflow-y-auto bg-gray-50/50 custom-scrollbar">
                                 {listaCaixas.map((c) => (
                                     <div
                                         key={c.id}
@@ -553,26 +571,22 @@ export default function ContasPagarModulo() {
                                 ))}
                             </div>
 
-                            {/* Lateral Direita: Painel Demonstrativo Clean */}
-                            <div className="w-2/3 p-6 overflow-y-auto bg-white dark:bg-gray-800 flex flex-col">
+                            {/* Lateral Direita: Painel Demonstrativo e Detalhamento */}
+                            <div className="w-2/3 p-6 overflow-y-auto custom-scrollbar bg-white dark:bg-gray-800 flex flex-col">
                                 {caixaSelecionado ? (
                                     carregandoRelatorio ? (
-                                        <div className="text-center py-20 font-bold text-cafe-primary animate-pulse">A calcular fechamento...</div>
+                                        <div className="text-center py-20 font-bold text-cafe-primary animate-pulse">A extrair relatório completo...</div>
                                     ) : detalhesRelatorio && (
-                                        <div className="space-y-5">
+                                        <div className="space-y-6">
+                                            {/* Cabeçalho do Relatório */}
                                             <div className="flex justify-between items-center border-b pb-3">
                                                 <div>
                                                     <h4 className="text-base font-black text-gray-800 dark:text-white">Extrato Consolidado do Turno</h4>
-                                                    <p className="text-xs text-gray-400">Período de movimentações e conciliação</p>
+                                                    <p className="text-xs text-gray-400">Resumo financeiro e conciliação da gaveta</p>
                                                 </div>
                                                 <button onClick={handleImprimirRelatorioTurno} className="bg-gray-900 text-white text-xs font-bold px-4 py-2 rounded-xl shadow hover:bg-gray-800 transition flex items-center gap-1.5">
-                                                    🖨️ Imprimir Cupom
+                                                    🖨️ Imprimir Fechamento Completo
                                                 </button>
-                                            </div>
-
-                                            <div className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-700/50 p-3 rounded-xl border border-gray-100 dark:border-gray-600 flex justify-between">
-                                                <span>Abertura: <strong>{formatarDataHora(caixaSelecionado.data_abertura)}</strong></span>
-                                                {caixaSelecionado.data_fechamento && <span>Fechamento: <strong>{formatarDataHora(caixaSelecionado.data_fechamento)}</strong></span>}
                                             </div>
 
                                             {/* Bloco Dinheiro Fisico */}
@@ -585,7 +599,7 @@ export default function ContasPagarModulo() {
                                                 <div className="flex justify-between font-bold pt-2 border-t mt-2 text-gray-800 dark:text-white"><span>= Saldo Esperado em Sistema:</span><span>{formatarMoeda(detalhesRelatorio.dinheiroEsperado)}</span></div>
                                             </div>
 
-                                            {/* NOVO BLOCO: DETALHE DE FECHAMENTO E CONFERÊNCIA */}
+                                            {/* DETALHE DE FECHAMENTO E CONFERÊNCIA */}
                                             {caixaSelecionado.status === 'fechado' && (
                                                 <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 space-y-2.5 text-sm shadow-sm">
                                                     <h5 className="text-xs font-black text-gray-400 uppercase tracking-wider">Conferência de Encerramento</h5>
@@ -603,24 +617,112 @@ export default function ContasPagarModulo() {
                                                 </div>
                                             )}
 
-                                            {/* Bloco Faturamento Digital */}
-                                            <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 space-y-2 text-sm">
-                                                <h5 className="text-xs font-black text-gray-400 uppercase tracking-wider">Faturamento Digital (Outros Meios)</h5>
-                                                <div className="flex justify-between"><span>📱 Recebimentos via PIX:</span><span className="font-bold text-gray-700 dark:text-gray-300">{formatarMoeda(detalhesRelatorio.totalPix)}</span></div>
-                                                <div className="flex justify-between"><span>💳 Cartão de Crédito:</span><span className="font-bold text-gray-700 dark:text-gray-300">{formatarMoeda(detalhesRelatorio.totalCredito)}</span></div>
-                                                <div className="flex justify-between"><span>💳 Cartão de Débito:</span><span className="font-bold text-gray-700 dark:text-gray-300">{formatarMoeda(detalhesRelatorio.totalDebito)}</span></div>
+                                            {/* Indicadores Totais e Digitais */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 space-y-2 text-sm">
+                                                    <h5 className="text-xs font-black text-gray-400 uppercase tracking-wider">Faturamento Digital</h5>
+                                                    <div className="flex justify-between"><span>📱 PIX:</span><span className="font-bold">{formatarMoeda(detalhesRelatorio.totalPix)}</span></div>
+                                                    <div className="flex justify-between"><span>💳 Crédito:</span><span className="font-bold">{formatarMoeda(detalhesRelatorio.totalCredito)}</span></div>
+                                                    <div className="flex justify-between"><span>💳 Débito:</span><span className="font-bold">{formatarMoeda(detalhesRelatorio.totalDebito)}</span></div>
+                                                </div>
+                                                <div className="p-4 rounded-xl bg-gray-900 text-white space-y-2 text-sm shadow flex flex-col justify-center">
+                                                    <div className="flex justify-between text-gray-300"><span>Vendas:</span><span className="font-bold">{detalhesRelatorio.qtdVendas} unid.</span></div>
+                                                    <div className="flex justify-between font-black text-base pt-2 border-t border-gray-800 text-green-400"><span>Bruto Total:</span><span>{formatarMoeda(detalhesRelatorio.faturamentoTotal)}</span></div>
+                                                </div>
                                             </div>
 
-                                            {/* Indicadores Totais */}
-                                            <div className="p-4 rounded-xl bg-gray-900 text-white space-y-2 text-sm shadow">
-                                                <div className="flex justify-between text-gray-300"><span>Volume de Atendimentos:</span><span className="font-bold">{detalhesRelatorio.qtdVendas} vendas</span></div>
-                                                <div className="flex justify-between font-black text-base pt-2 border-t border-gray-800 text-green-400"><span>Faturamento Bruto Total do Turno:</span><span>{formatarMoeda(detalhesRelatorio.faturamentoTotal)}</span></div>
+                                            {/* SEÇÃO NOVA: LISTAGENS DETALHADAS */}
+                                            <div className="mt-8 pt-6 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
+                                                <h4 className="font-black text-gray-800 dark:text-white text-lg mb-6">Detalhamento de Movimentações</h4>
+
+                                                {/* Entradas / Vendas */}
+                                                <div className="mb-6">
+                                                    <h5 className="font-bold text-sm text-blue-600 bg-blue-50 py-1 px-3 rounded-t-lg border border-blue-100 border-b-0">
+                                                        🧾 Entradas (Vendas)
+                                                    </h5>
+                                                    <div className="border border-blue-100 rounded-b-lg overflow-hidden bg-white">
+                                                        {detalhesRelatorio.listaVendas.length > 0 ? (
+                                                            <table className="w-full text-left text-xs">
+                                                                <thead className="bg-gray-50 text-gray-500 border-b">
+                                                                    <tr><th className="p-2">Hora</th><th className="p-2">Venda ID</th><th className="p-2 text-center">Método</th><th className="p-2 text-right">Valor</th></tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {detalhesRelatorio.listaVendas.map((v: any) => (
+                                                                        <tr key={v.id} className="border-b last:border-0 hover:bg-gray-50">
+                                                                            <td className="p-2 font-mono text-gray-500">{formatarDataHora(v.data_venda).split(' ')[1]}</td>
+                                                                            <td className="p-2 font-semibold">#{v.id.split('-')[0]}</td>
+                                                                            <td className="p-2 text-center"><span className="bg-gray-100 px-2 py-0.5 rounded text-[10px] font-bold text-gray-600">{v.metodo_pagamento || 'MISTO'}</span></td>
+                                                                            <td className="p-2 text-right font-bold text-gray-800">{formatarMoeda(v.total)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        ) : (
+                                                            <p className="p-4 text-xs text-gray-400 italic text-center">Nenhuma venda registrada no turno.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Suprimentos */}
+                                                <div className="mb-6">
+                                                    <h5 className="font-bold text-sm text-green-600 bg-green-50 py-1 px-3 rounded-t-lg border border-green-100 border-b-0">
+                                                        ➕ Suprimentos (Aportes em Dinheiro)
+                                                    </h5>
+                                                    <div className="border border-green-100 rounded-b-lg overflow-hidden bg-white">
+                                                        {detalhesRelatorio.listaSuprimentos.length > 0 ? (
+                                                            <table className="w-full text-left text-xs">
+                                                                <thead className="bg-gray-50 text-gray-500 border-b">
+                                                                    <tr><th className="p-2 w-1/4">Hora</th><th className="p-2">Descrição / Motivo</th><th className="p-2 text-right w-1/4">Valor</th></tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {detalhesRelatorio.listaSuprimentos.map((s: any) => (
+                                                                        <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
+                                                                            <td className="p-2 font-mono text-gray-500">{s.data_movimento ? formatarDataHora(s.data_movimento).split(' ')[1] : '-'}</td>
+                                                                            <td className="p-2 font-semibold text-gray-700">{s.descricao}</td>
+                                                                            <td className="p-2 text-right font-bold text-green-600">+{formatarMoeda(s.valor)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        ) : (
+                                                            <p className="p-4 text-xs text-gray-400 italic text-center">Nenhum suprimento registrado.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Sangrias */}
+                                                <div className="mb-6">
+                                                    <h5 className="font-bold text-sm text-red-600 bg-red-50 py-1 px-3 rounded-t-lg border border-red-100 border-b-0">
+                                                        ➖ Sangrias e Despesas (Saídas de Dinheiro)
+                                                    </h5>
+                                                    <div className="border border-red-100 rounded-b-lg overflow-hidden bg-white">
+                                                        {detalhesRelatorio.listaSangrias.length > 0 ? (
+                                                            <table className="w-full text-left text-xs">
+                                                                <thead className="bg-gray-50 text-gray-500 border-b">
+                                                                    <tr><th className="p-2 w-1/4">Hora</th><th className="p-2">Descrição / Motivo</th><th className="p-2 text-right w-1/4">Valor</th></tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {detalhesRelatorio.listaSangrias.map((s: any) => (
+                                                                        <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
+                                                                            <td className="p-2 font-mono text-gray-500">{s.data_movimento ? formatarDataHora(s.data_movimento).split(' ')[1] : '-'}</td>
+                                                                            <td className="p-2 font-semibold text-gray-700">{s.descricao}</td>
+                                                                            <td className="p-2 text-right font-bold text-red-600">-{formatarMoeda(s.valor)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        ) : (
+                                                            <p className="p-4 text-xs text-gray-400 italic text-center">Nenhuma sangria ou despesa registrada.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
                                             </div>
                                         </div>
                                     )
                                 ) : (
                                     <div className="text-center py-24 text-gray-400 italic text-sm">
-                                        ◀️ Selecione um caixa da lista lateral para auditar as informações de abertura, fechamento e diferenças.
+                                        ◀️ Selecione um caixa da lista lateral para auditar as informações completas.
                                     </div>
                                 )}
                             </div>
@@ -711,7 +813,6 @@ export default function ContasPagarModulo() {
                     </span>
                 </div>
 
-                {/* CARD BANCÁRIO */}
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg shadow-sm flex flex-col justify-center relative group">
                     <div className="flex justify-between">
                         <div>
@@ -731,9 +832,7 @@ export default function ContasPagarModulo() {
                 </div>
             </div>
 
-            {/* UNIFIED GRID STRUCTURE */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
                 {/* COLUNA ESQUERDA: Formulários e Resumos */}
                 <div className="lg:col-span-1 flex flex-col gap-6">
 

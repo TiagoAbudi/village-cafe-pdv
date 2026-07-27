@@ -14,8 +14,9 @@ import ContasPagarModulo from './components/ContasPagarModulo';
 import GestaoComandas from './components/GestaoComandas';
 import DashboardRendimentos from './components/DashboardRendimentos';
 import AlertasGlobaisProvider from './components/AlertasGlobaisProvider';
+import RelatorioVendasModulo from './components/RelatorioVendasModulo';
 
-type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro' | 'comandas' | 'rendimentos';
+type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro' | 'comandas' | 'rendimentos' | 'relatorio-vendas';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -66,6 +67,7 @@ function App() {
             <button onClick={() => setAbaAtiva('entradas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'entradas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Estoque</button>
             <button onClick={() => setAbaAtiva('financeiro')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'financeiro' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Financeiro</button>
             <button onClick={() => setAbaAtiva('rendimentos')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'rendimentos' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Rendimentos</button>
+            <button onClick={() => setAbaAtiva('relatorio-vendas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'relatorio-vendas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Relatório de Vendas</button>
           </nav>
 
           {/* ATUALIZADO: Mostra um alô para o atendente logado ao lado do botão Sair */}
@@ -86,6 +88,7 @@ function App() {
         {abaAtiva === 'financeiro' && <ContasPagarModulo />}
         {abaAtiva === 'comandas' && <GestaoComandas atendente={atendenteNome} />}
         {abaAtiva === 'rendimentos' && <DashboardRendimentos />}
+        {abaAtiva === 'relatorio-vendas' && <RelatorioVendasModulo />}
       </main>
     </div>
   );
