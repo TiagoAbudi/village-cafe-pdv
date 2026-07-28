@@ -38,7 +38,6 @@ export default function RelatorioVendasModulo() {
     // Filtros de Data (Padrão: Últimos 10 dias)
     const [dataInicio, setDataInicio] = useState(() => {
         const d = new Date();
-        d.setDate(d.getDate() - 10);
         return d.toISOString().split('T')[0];
     });
     const [dataFim, setDataFim] = useState(() => hojeDate.toISOString().split('T')[0]);
@@ -50,12 +49,10 @@ export default function RelatorioVendasModulo() {
     // Inicia a visualização do calendário na data correspondente
     const [mesInicioView, setMesInicioView] = useState(() => {
         const d = new Date();
-        d.setDate(d.getDate() - 10);
         return d.getMonth();
     });
     const [anoInicioView, setAnoInicioView] = useState(() => {
         const d = new Date();
-        d.setDate(d.getDate() - 10);
         return d.getFullYear();
     });
 
