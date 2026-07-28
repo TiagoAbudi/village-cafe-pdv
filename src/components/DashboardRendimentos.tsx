@@ -33,25 +33,46 @@ export default function DashboardRendimentos() {
             const dataInicioFiltro = `${dataInicio}T00:00:00.000Z`;
             const dataFimFiltro = `${dataFim}T23:59:59.999Z`;
 
-            const { data, error } = await supabase
-                .from('vendas')
-                .select(`
-          *,
-          itens_venda (
-            quantidade,
-            preco_unitario,
-            produtos (
-              nome,
-              preco_custo
-            )
-          )
-        `)
-                .gte('data_venda', dataInicioFiltro)
-                .lte('data_venda', dataFimFiltro)
-                .order('data_venda', { ascending: false });
+            // MOTOR DE BUSCA SEM LIMITE (PULA A BARREIRA DOS 1000)
+            let todasVendas: any[] = [];
+            let de = 0;
+            const limite = 1000;
+            let temMais = true;
 
-            if (error) throw error;
-            setVendas(data || []);
+            while (temMais) {
+                const { data, error } = await supabase
+                    .from('vendas')
+                    .select(`
+                        *,
+                        itens_venda (
+                            quantidade,
+                            preco_unitario,
+                            produtos (
+                                nome,
+                                preco_custo
+                            )
+                        )
+                    `)
+                    .gte('data_venda', dataInicioFiltro)
+                    .lte('data_venda', dataFimFiltro)
+                    .order('data_venda', { ascending: false })
+                    .range(de, de + limite - 1);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    todasVendas = [...todasVendas, ...data];
+                    if (data.length < limite) {
+                        temMais = false; // Veio menos de 1000, acabou
+                    } else {
+                        de += limite; // Prepara para buscar os próximos 1000
+                    }
+                } else {
+                    temMais = false;
+                }
+            }
+
+            setVendas(todasVendas);
         } catch (error) {
             console.error('Erro ao carregar dashboard:', error);
         } finally {

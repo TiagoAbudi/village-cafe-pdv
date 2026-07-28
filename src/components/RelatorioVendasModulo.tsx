@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Tipagens
@@ -38,6 +38,7 @@ export default function RelatorioVendasModulo() {
     // Filtros de Data (Padrão: Últimos 10 dias)
     const [dataInicio, setDataInicio] = useState(() => {
         const d = new Date();
+        d.setDate(d.getDate() - 10);
         return d.toISOString().split('T')[0];
     });
     const [dataFim, setDataFim] = useState(() => hojeDate.toISOString().split('T')[0]);
@@ -49,10 +50,12 @@ export default function RelatorioVendasModulo() {
     // Inicia a visualização do calendário na data correspondente
     const [mesInicioView, setMesInicioView] = useState(() => {
         const d = new Date();
+        d.setDate(d.getDate() - 10);
         return d.getMonth();
     });
     const [anoInicioView, setAnoInicioView] = useState(() => {
         const d = new Date();
+        d.setDate(d.getDate() - 10);
         return d.getFullYear();
     });
 
@@ -117,7 +120,7 @@ export default function RelatorioVendasModulo() {
             : <span className="text-blue-600 ml-2 font-black">↓</span>;
     };
 
-    // Busca principal de Vendas
+    // Busca principal de Vendas (Mantido igual pois usa range que ignora o limite de 1000 total)
     const buscarVendas = async (pagina = 1) => {
         setCarregando(true);
         try {
@@ -148,25 +151,43 @@ export default function RelatorioVendasModulo() {
         }
     };
 
-    // NOVA FUNÇÃO: Busca os totais gerais do período
+    // Busca os totais gerais do período (NOVO MOTOR PARA PASSAR DE 1000 REGISTROS)
     useEffect(() => {
         const carregarTotaisPeriodo = async () => {
             try {
                 const dataFimAjustada = `${dataFim}T23:59:59.999Z`;
                 const dataInicioAjustada = `${dataInicio}T00:00:00.000Z`;
 
-                // Seleciona apenas os campos de valores para não pesar o banco
-                const { data, error } = await supabase
-                    .from('vendas')
-                    .select('total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento')
-                    .gte('data_venda', dataInicioAjustada)
-                    .lte('data_venda', dataFimAjustada);
+                let todasVendasTotais: any[] = [];
+                let de = 0;
+                const limite = 1000;
+                let temMais = true;
 
-                if (error) throw error;
+                while (temMais) {
+                    const { data, error } = await supabase
+                        .from('vendas')
+                        .select('total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento')
+                        .gte('data_venda', dataInicioAjustada)
+                        .lte('data_venda', dataFimAjustada)
+                        .range(de, de + limite - 1);
+
+                    if (error) throw error;
+
+                    if (data && data.length > 0) {
+                        todasVendasTotais = [...todasVendasTotais, ...data];
+                        if (data.length < limite) {
+                            temMais = false;
+                        } else {
+                            de += limite;
+                        }
+                    } else {
+                        temMais = false;
+                    }
+                }
 
                 let pix = 0, din = 0, cred = 0, deb = 0, total = 0;
 
-                (data || []).forEach(v => {
+                todasVendasTotais.forEach(v => {
                     const t = Number(v.total) || 0;
                     total += t;
 
