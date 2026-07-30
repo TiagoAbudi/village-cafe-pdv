@@ -26,11 +26,13 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
     const [comandaAberta, setComandaAberta] = useState<Comanda | null>(null);
     const [quantidadeAdd] = useState<number | ''>(1);
 
-    // Estados Checkout (Pagamento - Igual ao PDV)
+    // Estados Checkout (Pagamento)
     const [modalCheckout, setModalCheckout] = useState(false);
     const [modoPagamento, setModoPagamento] = useState<'unico' | 'misto'>('unico');
     const [metodoUnico, setMetodoUnico] = useState('PIX');
     const [valorRecebidoDinheiro, setValorRecebidoDinheiro] = useState<number | ''>('');
+    const [desconto, setDesconto] = useState<number | ''>(''); // NOVO: Desconto da Comanda
+
     const [pagamentosMistos, setPagamentosMistos] = useState<PagamentoMisto[]>([
         { metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }
     ]);
@@ -54,7 +56,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
     const carregarDados = async (silencioso = false) => {
         if (!silencioso) setCarregando(true);
 
-        // 1. Verifica se existe Caixa Aberto
         const { data: caixaData } = await supabase.from('controle_caixa').select('id').eq('status', 'aberto').limit(1).maybeSingle();
         if (!caixaData) {
             setCaixaAberto(false);
@@ -63,7 +64,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         }
         setCaixaAberto(true);
 
-        // 2. Carrega comandas abertas e seus itens
         const { data: comandasData } = await supabase
             .from('comandas')
             .select('*, itens_comanda(*, produtos(nome))')
@@ -72,7 +72,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
         if (comandasData) setComandas(comandasData as unknown as Comanda[]);
 
-        // 3. Carrega produtos disponíveis para venda
         const { data: prodData } = await supabase.from('produtos').select('*').eq('tipo', 'venda').eq('ativo', true).order('nome');
         const { data: fichas } = await supabase.from('fichas_tecnicas').select('produto_venda_id');
         const fichasIds = new Set(fichas?.map(f => f.produto_venda_id) || []);
@@ -138,38 +137,18 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         } catch (error) { mostrarMensagem('Erro ao remover item.', 'erro'); }
     };
 
-    const alterarQuantidadeItem = async (
-        itemId: string,
-        quantidadeAtual: number,
-        delta: number
-    ) => {
+    const alterarQuantidadeItem = async (itemId: string, quantidadeAtual: number, delta: number) => {
         try {
             const novaQuantidade = quantidadeAtual + delta;
 
             if (novaQuantidade <= 0) {
-                await supabase
-                    .from('itens_comanda')
-                    .delete()
-                    .eq('id', itemId);
+                await supabase.from('itens_comanda').delete().eq('id', itemId);
             } else {
-                await supabase
-                    .from('itens_comanda')
-                    .update({
-                        quantidade: novaQuantidade
-                    })
-                    .eq('id', itemId);
+                await supabase.from('itens_comanda').update({ quantidade: novaQuantidade }).eq('id', itemId);
             }
 
-            const { data: comandaAtualizada } = await supabase
-                .from('comandas')
-                .select('*, itens_comanda(*, produtos(nome))')
-                .eq('id', comandaAberta?.id)
-                .single();
-
-            if (comandaAtualizada) {
-                setComandaAberta(comandaAtualizada as unknown as Comanda);
-            }
-
+            const { data: comandaAtualizada } = await supabase.from('comandas').select('*, itens_comanda(*, produtos(nome))').eq('id', comandaAberta?.id).single();
+            if (comandaAtualizada) setComandaAberta(comandaAtualizada as unknown as Comanda);
             carregarDados(true);
 
         } catch (error) {
@@ -179,14 +158,18 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
     // ---------- FUNÇÕES DE CHECKOUT ----------
 
-    const totalComandaAberta = useMemo(() => {
+    // ATUALIZADO: Cálculos agora consideram o desconto
+    const subtotalComandaAberta = useMemo(() => {
         return comandaAberta?.itens_comanda.reduce((acc, item) => acc + (item.preco_unitario * item.quantidade), 0) || 0;
     }, [comandaAberta]);
 
+    const valorDesconto = Number(desconto) || 0;
+    const totalComDesconto = Math.max(0, subtotalComandaAberta - valorDesconto); // Total final a pagar
+
     const totalPagoMisto = pagamentosMistos.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
-    const faltaPagarMisto = modoPagamento === 'misto' && totalPagoMisto < totalComandaAberta ? totalComandaAberta - totalPagoMisto : 0;
-    const trocoMisto = modoPagamento === 'misto' && totalPagoMisto > totalComandaAberta ? totalPagoMisto - totalComandaAberta : 0;
-    const trocoUnico = modoPagamento === 'unico' && metodoUnico === 'Dinheiro' && Number(valorRecebidoDinheiro) > totalComandaAberta ? Number(valorRecebidoDinheiro) - totalComandaAberta : 0;
+    const faltaPagarMisto = modoPagamento === 'misto' && totalPagoMisto < totalComDesconto ? totalComDesconto - totalPagoMisto : 0;
+    const trocoMisto = modoPagamento === 'misto' && totalPagoMisto > totalComDesconto ? totalPagoMisto - totalComDesconto : 0;
+    const trocoUnico = modoPagamento === 'unico' && metodoUnico === 'Dinheiro' && Number(valorRecebidoDinheiro) > totalComDesconto ? Number(valorRecebidoDinheiro) - totalComDesconto : 0;
 
     const confirmarExclusao = () => {
         setConfirmacao({
@@ -211,22 +194,23 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         setModoPagamento('unico');
         setMetodoUnico('PIX');
         setValorRecebidoDinheiro('');
+        setDesconto(''); // Reseta desconto ao abrir checkout
         setPagamentosMistos([{ metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }]);
         setModalCheckout(true);
     };
 
     const finalizarVenda = async () => {
         if (!comandaAberta) return;
-        if (modoPagamento === 'misto' && totalPagoMisto < totalComandaAberta) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
+        if (modoPagamento === 'misto' && totalPagoMisto < totalComDesconto) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
 
         let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
         let metodosStr = '';
 
         if (modoPagamento === 'unico') {
-            vPix = metodoUnico === 'PIX' ? totalComandaAberta : 0;
-            vCred = metodoUnico === 'Cartão de Crédito' ? totalComandaAberta : 0;
-            vDeb = metodoUnico === 'Cartão de Débito' ? totalComandaAberta : 0;
-            vDin = metodoUnico === 'Dinheiro' ? totalComandaAberta : 0;
+            vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
+            vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
+            vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
+            vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
             metodosStr = metodoUnico;
         } else {
             let trocoRestante = trocoMisto;
@@ -247,10 +231,11 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         }
 
         try {
-            // 1. Registar na tabela de Vendas (Sem caixa_id)
+            // ATUALIZADO: Gravando a venda com o total final (com desconto) e a coluna de desconto
             const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{
                 identificacao_pedido: `Comanda: ${comandaAberta.identificacao}`,
-                total: totalComandaAberta,
+                total: totalComDesconto,
+                desconto: valorDesconto, // Gravando desconto
                 metodo_pagamento: metodosStr,
                 valor_pix: vPix,
                 valor_dinheiro: vDin,
@@ -261,7 +246,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
             if (erroVenda) throw erroVenda;
 
-            // 2. Processar Itens, Baixar Estoque e Fichas Técnicas
             for (const item of comandaAberta.itens_comanda) {
                 await supabase.from('itens_venda').insert([{ venda_id: vendaCriada.id, produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario }]);
                 const isReceita = produtos.find(p => p.id === item.produto_id)?.is_receita;
@@ -290,7 +274,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                 }
             }
 
-            // 3. Fechar a Comanda Oficialmente
             await supabase.from('comandas').update({ status: 'fechada' }).eq('id', comandaAberta.id);
 
             mostrarMensagem('Venda finalizada e estoque atualizado!', 'sucesso');
@@ -339,117 +322,37 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                         </div>
 
                         <div className="mb-6">
-
                             <input
                                 type="text"
                                 placeholder="🔍 Buscar produto..."
                                 value={buscaProduto}
                                 onChange={(e) => setBuscaProduto(e.target.value)}
-                                className="
-            w-full
-            p-3
-            border
-            rounded-lg
-            mb-3
-            outline-none
-            focus:ring-2
-            focus:ring-cafe-primary
-        "
+                                className="w-full p-3 border rounded-lg mb-3 outline-none focus:ring-2 focus:ring-cafe-primary"
                             />
-
                             <div className="space-y-2 max-h-[320px] overflow-y-auto">
-
                                 {produtosFiltrados.map(produto => {
-
-                                    const semEstoque =
-                                        !produto.is_receita &&
-                                        produto.quantidade_estoque <= 0;
-
-                                    const estoqueBaixo =
-                                        !produto.is_receita &&
-                                        produto.quantidade_estoque > 0 &&
-                                        produto.quantidade_estoque <= 5;
-
+                                    const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
+                                    const estoqueBaixo = !produto.is_receita && produto.quantidade_estoque > 0 && produto.quantidade_estoque <= 5;
                                     return (
-                                        <div
-                                            key={produto.id}
-                                            className="
-                        bg-white
-                        border
-                        rounded-lg
-                        p-3
-                        flex
-                        items-center
-                        justify-between
-                        hover:shadow-sm
-                        transition
-                    "
-                                        >
+                                        <div key={produto.id} className="bg-white border rounded-lg p-3 flex items-center justify-between hover:shadow-sm transition">
                                             <div className="flex-1 min-w-0">
-
-                                                <h4 className="font-semibold truncate text-sm">
-                                                    {produto.nome}
-                                                </h4>
-
+                                                <h4 className="font-semibold truncate text-sm">{produto.nome}</h4>
                                                 <div className="flex flex-wrap items-center gap-2 mt-1">
-
-                                                    <span className="font-bold text-cafe-primary text-sm">
-                                                        {formatarMoeda(produto.preco_venda)}
-                                                    </span>
-
+                                                    <span className="font-bold text-cafe-primary text-sm">{formatarMoeda(produto.preco_venda)}</span>
                                                     {!produto.is_receita && (
                                                         <>
-                                                            {semEstoque && (
-                                                                <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold">
-                                                                    🔴 Sem estoque
-                                                                </span>
-                                                            )}
-
-                                                            {estoqueBaixo && (
-                                                                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">
-                                                                    🟡 {produto.quantidade_estoque} un
-                                                                </span>
-                                                            )}
-
-                                                            {!semEstoque && !estoqueBaixo && (
-                                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
-                                                                    🟢 {produto.quantidade_estoque} un
-                                                                </span>
-                                                            )}
+                                                            {semEstoque && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold">🔴 Sem estoque</span>}
+                                                            {estoqueBaixo && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">🟡 {produto.quantidade_estoque} un</span>}
+                                                            {!semEstoque && !estoqueBaixo && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">🟢 {produto.quantidade_estoque} un</span>}
                                                         </>
                                                     )}
-
                                                 </div>
                                             </div>
-
-                                            <button
-                                                onClick={() => adicionarItem(produto)}
-                                                disabled={semEstoque}
-                                                className={`
-                            ml-3
-                            w-10
-                            h-10
-                            rounded-full
-                            font-bold
-                            text-xl
-                            flex
-                            items-center
-                            justify-center
-                            transition
-                            ${semEstoque
-                                                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                                        : 'bg-cafe-primary text-white hover:opacity-90 active:scale-95'
-                                                    }
-                        `}
-                                            >
-                                                +
-                                            </button>
+                                            <button onClick={() => adicionarItem(produto)} disabled={semEstoque} className={`ml-3 w-10 h-10 rounded-full font-bold text-xl flex items-center justify-center transition ${semEstoque ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-cafe-primary text-white hover:opacity-90 active:scale-95'}`}>+</button>
                                         </div>
                                     );
                                 })}
-
                             </div>
-
                         </div>
 
                         <div className="flex-1 overflow-y-auto mb-4 border rounded p-2 bg-gray-50 min-h-[200px]">
@@ -458,96 +361,17 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             ) : (
                                 <ul className="space-y-3">
                                     {comandaAberta.itens_comanda.map(item => (
-                                        <li
-                                            key={item.id}
-                                            className="
-        bg-white
-        border
-        rounded-lg
-        p-3
-        shadow-sm
-        flex
-        justify-between
-        items-center
-    "
-                                        >
+                                        <li key={item.id} className="bg-white border rounded-lg p-3 shadow-sm flex justify-between items-center">
                                             <div className="flex-1">
-
-                                                <div className="font-semibold">
-                                                    {item.produtos?.nome}
-                                                </div>
-
-                                                <div className="text-xs text-gray-500">
-                                                    {formatarMoeda(item.preco_unitario)} cada
-                                                </div>
-
+                                                <div className="font-semibold">{item.produtos?.nome}</div>
+                                                <div className="text-xs text-gray-500">{formatarMoeda(item.preco_unitario)} cada</div>
                                             </div>
-
                                             <div className="flex items-center gap-3">
-
-                                                <button
-                                                    onClick={() =>
-                                                        alterarQuantidadeItem(
-                                                            item.id,
-                                                            item.quantidade,
-                                                            -1
-                                                        )
-                                                    }
-                                                    className="
-                w-8
-                h-8
-                rounded-full
-                bg-gray-100
-                hover:bg-gray-200
-                font-bold
-            "
-                                                >
-                                                    -
-                                                </button>
-
-                                                <span className="font-bold w-6 text-center">
-                                                    {item.quantidade}
-                                                </span>
-
-                                                <button
-                                                    onClick={() =>
-                                                        alterarQuantidadeItem(
-                                                            item.id,
-                                                            item.quantidade,
-                                                            1
-                                                        )
-                                                    }
-                                                    className="
-                w-8
-                h-8
-                rounded-full
-                bg-cafe-primary
-                text-white
-                hover:opacity-90
-                font-bold
-            "
-                                                >
-                                                    +
-                                                </button>
-
-                                                <div className="w-24 text-right font-black">
-                                                    {formatarMoeda(
-                                                        item.quantidade *
-                                                        item.preco_unitario
-                                                    )}
-                                                </div>
-
-                                                <button
-                                                    onClick={() => removerItem(item.id)}
-                                                    className="
-                text-red-500
-                hover:text-red-700
-                font-bold
-            "
-                                                >
-                                                    🗑️
-                                                </button>
-
+                                                <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, -1)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 font-bold">-</button>
+                                                <span className="font-bold w-6 text-center">{item.quantidade}</span>
+                                                <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, 1)} className="w-8 h-8 rounded-full bg-cafe-primary text-white hover:opacity-90 font-bold">+</button>
+                                                <div className="w-24 text-right font-black">{formatarMoeda(item.quantidade * item.preco_unitario)}</div>
+                                                <button onClick={() => removerItem(item.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️</button>
                                             </div>
                                         </li>
                                     ))}
@@ -555,19 +379,11 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             )}
                         </div>
 
-
                         <div className="border-t pt-4 flex justify-between items-center bg-white">
-                            {/* Botão de Excluir adicionado aqui */}
-                            <button
-                                onClick={confirmarExclusao}
-                                className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded transition"
-                            >
-                                Excluir Comanda
-                            </button>
-
+                            <button onClick={confirmarExclusao} className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded transition">Excluir Comanda</button>
                             <div className="text-right">
                                 <span className="block text-sm text-gray-500 font-semibold">Total Parcial</span>
-                                <span className="text-3xl font-black text-cafe-primary">{formatarMoeda(totalComandaAberta)}</span>
+                                <span className="text-3xl font-black text-cafe-primary">{formatarMoeda(subtotalComandaAberta)}</span>
                             </div>
                             <button onClick={abrirCheckout} className="bg-blue-600 text-white text-lg font-bold px-6 py-3 rounded shadow hover:bg-blue-700 active:scale-95 transition">Encerrar e Pagar</button>
                         </div>
@@ -584,9 +400,28 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             <button onClick={() => setModalCheckout(false)} className="text-gray-400 hover:text-red-500 font-bold">Voltar</button>
                         </div>
 
+                        {/* ATUALIZADO: Mostrando subtotal, campo de desconto e total final */}
+                        <div className="mb-4">
+                            <div className="flex justify-between items-center text-sm font-semibold text-gray-600 mb-2">
+                                <span>Subtotal da Comanda:</span>
+                                <span>{formatarMoeda(subtotalComandaAberta)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center bg-red-50 p-2 rounded border border-red-100 mb-3">
+                                <span className="text-sm font-bold text-red-700">Desconto:</span>
+                                <input
+                                    type="number"
+                                    placeholder="R$ 0,00"
+                                    className="w-24 p-1.5 border border-red-200 rounded text-right font-bold text-red-700 outline-none focus:ring-1 focus:ring-red-400 bg-white"
+                                    value={desconto}
+                                    onChange={(e) => setDesconto(Number(e.target.value) >= 0 ? Number(e.target.value) : '')}
+                                />
+                            </div>
+                        </div>
+
                         <div className="bg-blue-50 text-blue-900 p-4 rounded-lg text-center mb-6 border border-blue-200">
                             <span className="text-sm font-semibold uppercase tracking-wider block mb-1">Total a Pagar</span>
-                            <span className="text-4xl font-black">{formatarMoeda(totalComandaAberta)}</span>
+                            <span className="text-4xl font-black">{formatarMoeda(totalComDesconto)}</span>
                         </div>
 
                         <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
@@ -647,7 +482,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                 {comandas.map(comanda => {
                     const totalItens = comanda.itens_comanda.reduce((acc, i) => acc + i.quantidade, 0);
                     const totalValor = comanda.itens_comanda.reduce((acc, i) => acc + (i.quantidade * i.preco_unitario), 0);
-
                     return (
                         <div key={comanda.id} onClick={() => setComandaAberta(comanda)} className="bg-white border-2 border-cafe-secondary/30 hover:border-cafe-primary rounded-xl p-4 shadow-sm cursor-pointer hover:shadow-md transition group relative overflow-hidden flex flex-col justify-between min-h-[140px]">
                             <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400"></div>
@@ -662,7 +496,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                         </div>
                     )
                 })}
-
                 {comandas.length === 0 && (
                     <div className="col-span-full flex flex-col items-center justify-center p-12 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
                         <span className="text-4xl mb-3 opacity-50">🍽️</span>

@@ -14,6 +14,9 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [identificacaoPedido, setIdentificacaoPedido] = useState('');
 
+  // NOVO: Estado para o desconto
+  const [desconto, setDesconto] = useState<number | ''>('');
+
   const [modoPagamento, setModoPagamento] = useState<'unico' | 'misto'>('unico');
   const [metodoUnico, setMetodoUnico] = useState('PIX');
   const [valorRecebidoDinheiro, setValorRecebidoDinheiro] = useState<number | ''>('');
@@ -87,25 +90,29 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
   const removerDoCarrinho = (id: string) => setCarrinho(carrinho.filter(item => item.produto.id !== id));
 
+  // ATUALIZADO: Cálculos agora consideram o desconto
   const totalVenda = useMemo(() => carrinho.reduce((acc, item) => acc + (item.produto.preco_venda * item.quantidade), 0), [carrinho]);
+  const valorDesconto = Number(desconto) || 0;
+  const totalComDesconto = Math.max(0, totalVenda - valorDesconto); // Evita ficar negativo
+
   const totalPagoMisto = pagamentosMistos.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
 
-  const faltaPagarMisto = modoPagamento === 'misto' && totalPagoMisto < totalVenda ? totalVenda - totalPagoMisto : 0;
-  const trocoMisto = modoPagamento === 'misto' && totalPagoMisto > totalVenda ? totalPagoMisto - totalVenda : 0;
-  const trocoUnico = modoPagamento === 'unico' && metodoUnico === 'Dinheiro' && Number(valorRecebidoDinheiro) > totalVenda ? Number(valorRecebidoDinheiro) - totalVenda : 0;
+  const faltaPagarMisto = modoPagamento === 'misto' && totalPagoMisto < totalComDesconto ? totalComDesconto - totalPagoMisto : 0;
+  const trocoMisto = modoPagamento === 'misto' && totalPagoMisto > totalComDesconto ? totalPagoMisto - totalComDesconto : 0;
+  const trocoUnico = modoPagamento === 'unico' && metodoUnico === 'Dinheiro' && Number(valorRecebidoDinheiro) > totalComDesconto ? Number(valorRecebidoDinheiro) - totalComDesconto : 0;
 
   const finalizarVenda = async () => {
     if (carrinho.length === 0) return mostrarMensagem('Adicione produtos ao carrinho.', 'aviso');
-    if (modoPagamento === 'misto' && totalPagoMisto < totalVenda) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
+    if (modoPagamento === 'misto' && totalPagoMisto < totalComDesconto) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
 
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
     let metodosStr = '';
 
     if (modoPagamento === 'unico') {
-      vPix = metodoUnico === 'PIX' ? totalVenda : 0;
-      vCred = metodoUnico === 'Cartão de Crédito' ? totalVenda : 0;
-      vDeb = metodoUnico === 'Cartão de Débito' ? totalVenda : 0;
-      vDin = metodoUnico === 'Dinheiro' ? totalVenda : 0;
+      vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
+      vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
+      vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
+      vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
       metodosStr = metodoUnico;
     } else {
       let trocoRestante = trocoMisto;
@@ -126,11 +133,14 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
     }
 
     try {
-      // ATUALIZADO: Se identificacaoPedido estiver vazio, assume 'Venda Balcão' automaticamente
       const identificacaoFinal = identificacaoPedido.trim() || 'Venda Balcão';
 
+      // ATUALIZADO: Registrando desconto e usando o total com desconto
       const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{
-        identificacao_pedido: identificacaoFinal, total: totalVenda, metodo_pagamento: metodosStr,
+        identificacao_pedido: identificacaoFinal,
+        total: totalComDesconto,
+        desconto: valorDesconto, // Grava o desconto no banco
+        metodo_pagamento: metodosStr,
         valor_pix: vPix, valor_dinheiro: vDin, valor_cartao_credito: vCred, valor_cartao_debito: vDeb,
         atendente: atendente
       }]).select().single();
@@ -149,7 +159,7 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
       }
 
       mostrarMensagem('Venda finalizada!', 'sucesso');
-      setCarrinho([]); setIdentificacaoPedido(''); setValorRecebidoDinheiro('');
+      setCarrinho([]); setIdentificacaoPedido(''); setValorRecebidoDinheiro(''); setDesconto(''); // Reseta o desconto
       setPagamentosMistos([{ metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }]);
       carregarProdutos();
 
@@ -234,9 +244,25 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
         </div>
 
         <div className="p-4 border-t border-gray-200 bg-white rounded-b-lg space-y-3">
-          <div className="flex justify-between items-center text-2xl font-black border-b pb-2"><span>Total:</span><span className="text-green-600">{formatarMoeda(totalVenda)}</span></div>
+          <div className="flex justify-between items-center text-sm font-semibold text-gray-600">
+            <span>Subtotal:</span><span>{formatarMoeda(totalVenda)}</span>
+          </div>
 
-          {/* Placeholder atualizado para indicar que se tornou opcional */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-gray-600">Desconto:</span>
+            <input
+              type="number"
+              placeholder="R$ 0,00"
+              className="flex-1 p-1.5 border border-red-200 rounded text-right font-bold text-red-600 outline-none focus:ring-1 focus:ring-red-400 bg-red-50"
+              value={desconto}
+              onChange={(e) => setDesconto(Number(e.target.value) >= 0 ? Number(e.target.value) : '')}
+            />
+          </div>
+
+          <div className="flex justify-between items-center text-2xl font-black border-b pb-2">
+            <span>Total:</span><span className="text-green-600">{formatarMoeda(totalComDesconto)}</span>
+          </div>
+
           <input type="text" placeholder="Identificação (Opcional - Ex: Mesa 02)" className="w-full p-2 border border-gray-300 rounded text-center font-bold outline-none focus:ring-2 focus:ring-cafe-primary" value={identificacaoPedido} onChange={(e) => setIdentificacaoPedido(e.target.value)} />
 
           <div className="flex bg-gray-100 p-1 rounded-lg">

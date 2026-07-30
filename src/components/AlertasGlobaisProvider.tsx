@@ -34,7 +34,7 @@ export default function AlertasGlobaisProvider() {
                         else if (diffDays === 1) mensagens.push(`⏰ Vence AMANHÃ: "${c.descricao}" (${formatarMoeda(c.valor)})`);
                         else mensagens.push(`📅 Vence em ${diffDays} dias: "${c.descricao}" (${formatarMoeda(c.valor)})`);
                     } else if (diffDays < 0) {
-                        mensagens.push(`🚨 ATRAZADO faz ${Math.abs(diffDays)} dias: "${c.descricao}" (${formatarMoeda(c.valor)})`);
+                        mensagens.push(`🚨 ATRASADO faz ${Math.abs(diffDays)} dias: "${c.descricao}" (${formatarMoeda(c.valor)})`);
                     }
                 });
 
