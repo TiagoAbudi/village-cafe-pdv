@@ -21,6 +21,8 @@ type ItemCarrinhoLote = {
   precoVenda: number | '';
 };
 
+type PagamentoMisto = { metodo: string; valor: number | '' };
+
 interface CadastroRevendaProps {
   atendente: string;
 }
@@ -53,9 +55,17 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
   // ESTADOS DO CARRINHO DE LOTE (COMPRA DE ESTOQUE)
   const [modalLoteOpen, setModalLoteOpen] = useState(false);
+  const [abaLoteMobile, setAbaLoteMobile] = useState<'busca' | 'carrinho'>('busca');
   const [termoBuscaLote, setTermoBuscaLote] = useState('');
   const [carrinhoLote, setCarrinhoLote] = useState<ItemCarrinhoLote[]>([]);
+
+  // Novos estados para Pagamento Misto
+  const [modoPagamentoLote, setModoPagamentoLote] = useState<'unico' | 'misto'>('unico');
   const [metodoPagamentoLote, setMetodoPagamentoLote] = useState('PIX');
+  const [pagamentosMistosLote, setPagamentosMistosLote] = useState<PagamentoMisto[]>([
+    { metodo: 'PIX', valor: '' }, { metodo: 'Conta a Pagar', valor: '' }
+  ]);
+
   const [fornecedorLoteId, setFornecedorLoteId] = useState('');
   const [dataVencimentoLote, setDataVencimentoLote] = useState('');
 
@@ -188,18 +198,68 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     setCarrinhoLote(carrinhoLote.filter(item => item.produtoId !== id));
   };
 
+  // Cálculos dinâmicos para o Pagamento Misto
+  const totalCustoLote = carrinhoLote.reduce((acc, item) => acc + (Number(item.qtd) * Number(item.custoUnitario || 0)), 0);
+  const totalPagoMistoLote = pagamentosMistosLote.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+  const faltaPagarMistoLote = modoPagamentoLote === 'misto' && totalPagoMistoLote < totalCustoLote ? totalCustoLote - totalPagoMistoLote : 0;
+  const trocoMistoLote = modoPagamentoLote === 'misto' && totalPagoMistoLote > totalCustoLote ? totalPagoMistoLote - totalCustoLote : 0;
+
   const salvarEntradasEmLote = async () => {
     if (carrinhoLote.length === 0) return mostrarMensagem('O carrinho está vazio.', 'aviso');
     if (carrinhoLote.some(item => !item.qtd || Number(item.qtd) <= 0)) return mostrarMensagem('Qtd inválida no carrinho.', 'aviso');
 
-    const totalCustoLote = carrinhoLote.reduce((acc, item) => acc + (Number(item.qtd) * Number(item.custoUnitario || 0)), 0);
+    // Validação Financeira e Distribuição dos Pagamentos
+    let vPix = 0, vDin = 0, vCred = 0, vDeb = 0, vTrans = 0, vPrazo = 0;
+    let metodosImediatos: string[] = [];
 
-    if (metodoPagamentoLote === 'Conta a Pagar' && !dataVencimentoLote && totalCustoLote > 0) {
-      return mostrarMensagem('Informe a data de vencimento para compras a prazo.', 'aviso');
+    if (modoPagamentoLote === 'unico') {
+      if (metodoPagamentoLote === 'Conta a Pagar') {
+        if (!dataVencimentoLote && totalCustoLote > 0) return mostrarMensagem('Informe a data de vencimento para compras a prazo.', 'aviso');
+        vPrazo = totalCustoLote;
+      } else {
+        if (metodoPagamentoLote === 'PIX') vPix = totalCustoLote;
+        if (metodoPagamentoLote === 'Dinheiro') vDin = totalCustoLote;
+        if (metodoPagamentoLote === 'Cartão de Crédito') vCred = totalCustoLote;
+        if (metodoPagamentoLote === 'Cartão de Débito') vDeb = totalCustoLote;
+        if (metodoPagamentoLote === 'Transferência') vTrans = totalCustoLote;
+        metodosImediatos.push(metodoPagamentoLote);
+      }
+    } else {
+      if (totalPagoMistoLote < totalCustoLote) return mostrarMensagem(`Falta alocar ${formatarMoeda(faltaPagarMistoLote)} nos pagamentos!`, 'erro');
+
+      const temPrazo = pagamentosMistosLote.some(p => p.metodo === 'Conta a Pagar' && Number(p.valor) > 0);
+      if (temPrazo && !dataVencimentoLote) {
+        return mostrarMensagem('Informe a data de vencimento para o valor a prazo.', 'aviso');
+      }
+
+      let trocoRestante = trocoMistoLote;
+      pagamentosMistosLote.forEach(p => {
+        let val = Number(p.valor) || 0;
+        if (val <= 0) return;
+
+        if (p.metodo === 'Conta a Pagar') {
+          vPrazo += val;
+        } else {
+          if (p.metodo === 'PIX') { vPix += val; metodosImediatos.push('PIX'); }
+          if (p.metodo === 'Cartão de Crédito') { vCred += val; metodosImediatos.push('Cartão de Crédito'); }
+          if (p.metodo === 'Cartão de Débito') { vDeb += val; metodosImediatos.push('Cartão de Débito'); }
+          if (p.metodo === 'Transferência') { vTrans += val; metodosImediatos.push('Transferência'); }
+          if (p.metodo === 'Dinheiro') {
+            if (trocoRestante > 0) {
+              if (val >= trocoRestante) { val -= trocoRestante; trocoRestante = 0; }
+              else { trocoRestante -= val; val = 0; }
+            }
+            vDin += val;
+            if (val > 0) metodosImediatos.push('Dinheiro');
+          }
+        }
+      });
     }
 
-    if (metodoPagamentoLote === 'Dinheiro' && !caixaAtivo && totalCustoLote > 0) {
-      return mostrarMensagem('Não é possível pagar em dinheiro com o caixa fechado.', 'erro');
+    const valorImediatoTotal = vPix + vDin + vCred + vDeb + vTrans;
+
+    if (vDin > 0 && !caixaAtivo) {
+      return mostrarMensagem('Não é possível retirar dinheiro da gaveta com o caixa fechado.', 'erro');
     }
 
     setCarregando(true);
@@ -226,37 +286,54 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       // 2. Registrar Transação Financeira
       if (totalCustoLote > 0) {
         const dataHoje = new Date().toISOString().split('T')[0];
-        const isPago = metodoPagamentoLote !== 'Conta a Pagar';
 
-        const { error: erroConta } = await supabase.from('contas_pagar').insert([{
-          descricao: 'Compra de Estoque (Lote de Entrada)',
-          fornecedor_id: fornecedorLoteId || null,
-          valor: totalCustoLote,
-          data_vencimento: isPago ? dataHoje : dataVencimentoLote,
-          data_pagamento: isPago ? dataHoje : null,
-          status: isPago ? 'Pago' : 'Pendente',
-          metodo_pagamento: isPago ? metodoPagamentoLote : null
-        }]);
+        // Lançar valor imediato (PIX, Dinheiro, Cartões)
+        if (valorImediatoTotal > 0) {
+          const metodosUnicos = Array.from(new Set(metodosImediatos)).join(' + ');
 
-        if (erroConta) throw erroConta;
+          await supabase.from('contas_pagar').insert([{
+            descricao: `Compra Lote (Pagamento Imediato)`,
+            fornecedor_id: fornecedorLoteId || null,
+            valor: valorImediatoTotal,
+            data_vencimento: dataHoje,
+            data_pagamento: dataHoje,
+            status: 'Pago',
+            metodo_pagamento: metodosUnicos
+          }]);
 
-        if (isPago) {
-          if (metodoPagamentoLote === 'Dinheiro' && caixaAtivo) {
+          if (vDin > 0 && caixaAtivo) {
             await supabase.from('movimentacoes_caixa').insert([{
-              caixa_id: caixaAtivo.id, tipo: 'despesa', valor: totalCustoLote, descricao: `Pago: Compra Estoque (Lote)`
+              caixa_id: caixaAtivo.id, tipo: 'despesa', valor: vDin, descricao: `Pago: Compra Estoque (Lote)`
             }]);
-          } else if (metodoPagamentoLote === 'PIX' || metodoPagamentoLote === 'Cartão de Débito' || metodoPagamentoLote === 'Transferência') {
+          }
+
+          const valorBanco = vPix + vDeb + vTrans;
+          if (valorBanco > 0) {
             const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
             if (banco) {
-              await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) - totalCustoLote }).eq('id', 1);
+              await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) - valorBanco }).eq('id', 1);
             }
           }
+        }
+
+        // Lançar valor a prazo (Contas a Pagar)
+        if (vPrazo > 0) {
+          await supabase.from('contas_pagar').insert([{
+            descricao: `Compra Lote (A Prazo)`,
+            fornecedor_id: fornecedorLoteId || null,
+            valor: vPrazo,
+            data_vencimento: dataVencimentoLote,
+            data_pagamento: null,
+            status: 'Pendente',
+            metodo_pagamento: null
+          }]);
         }
       }
 
       mostrarMensagem('Lote processado e financeiro atualizado!', 'sucesso');
       setCarrinhoLote([]); setTermoBuscaLote(''); setModalLoteOpen(false);
-      setMetodoPagamentoLote('PIX'); setFornecedorLoteId(''); setDataVencimentoLote('');
+      setModoPagamentoLote('unico'); setMetodoPagamentoLote('PIX'); setFornecedorLoteId(''); setDataVencimentoLote('');
+      setPagamentosMistosLote([{ metodo: 'PIX', valor: '' }, { metodo: 'Conta a Pagar', valor: '' }]);
       carregarDados();
     } catch (error) { mostrarMensagem('Erro ao registrar entrada.', 'erro'); } finally { setCarregando(false); }
   };
@@ -272,6 +349,10 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     } catch (error) { mostrarMensagem('Erro ao atualizar.', 'erro'); }
   };
 
+  // Verifica se o campo de Data de Vencimento deve ser exibido
+  const mostraVencimentoLote = (modoPagamentoLote === 'unico' && metodoPagamentoLote === 'Conta a Pagar') ||
+    (modoPagamentoLote === 'misto' && pagamentosMistosLote.some(p => p.metodo === 'Conta a Pagar' && Number(p.valor) > 0));
+
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-4 md:my-8 relative">
       {/* Feedback Toast */}
@@ -282,43 +363,65 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       )}
 
       {/* MODAL: CARRINHO DE ENTRADA EM LOTE */}
+      {/* MODAL: CARRINHO DE ENTRADA EM LOTE */}
       {modalLoteOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-2 md:p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[95vh] md:h-[85vh] flex flex-col overflow-hidden border">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-0 md:p-4">
+          <div className="bg-white md:rounded-2xl shadow-2xl w-full max-w-5xl h-full md:h-[85vh] flex flex-col overflow-hidden border-0 md:border">
 
-            <div className="p-4 md:p-5 bg-gray-900 border-b flex justify-between items-center text-white">
+            <div className="p-4 md:p-5 bg-gray-900 md:border-b flex justify-between items-center text-white shrink-0 pt-safe-top">
               <div>
-                <h3 className="text-base md:text-lg font-black tracking-wide">📥 Compra de Estoque (Lote)</h3>
-                <p className="text-xs text-gray-400 mt-0.5 hidden md:block">Adicione produtos, atualize os custos e registre o pagamento.</p>
+                <h3 className="text-lg font-black tracking-wide">📥 Compra (Lote)</h3>
+                <p className="text-xs text-gray-400 mt-0.5 hidden md:block">Adicione produtos, atualize custos e divida o pagamento.</p>
               </div>
-              <button onClick={() => { setModalLoteOpen(false); setCarrinhoLote([]); }} className="text-gray-400 hover:text-red-500 font-black text-2xl px-2">✕</button>
+              <button onClick={() => { setModalLoteOpen(false); setCarrinhoLote([]); setAbaLoteMobile('busca'); }} className="text-gray-400 hover:text-red-500 font-black text-2xl px-2">✕</button>
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            {/* NAVEGAÇÃO MOBILE (TABS) */}
+            <div className="lg:hidden flex bg-gray-100 p-1.5 shrink-0 border-b">
+              <button
+                onClick={() => setAbaLoteMobile('busca')}
+                className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition ${abaLoteMobile === 'busca' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500'}`}
+              >
+                🔍 Buscar Produtos
+              </button>
+              <button
+                onClick={() => setAbaLoteMobile('carrinho')}
+                className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition flex items-center justify-center gap-2 ${abaLoteMobile === 'carrinho' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500'}`}
+              >
+                🛒 Carrinho
+                {carrinhoLote.length > 0 && (
+                  <span className={`${abaLoteMobile === 'carrinho' ? 'bg-cafe-primary text-white' : 'bg-gray-400 text-white'} px-2 py-0.5 rounded-full text-[10px]`}>
+                    {carrinhoLote.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
               {/* ESQUERDA: BUSCA DE PRODUTOS */}
-              <div className="w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r flex flex-col bg-white h-[40vh] lg:h-auto shrink-0">
+              <div className={`${abaLoteMobile === 'busca' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 border-r-0 lg:border-r flex-col bg-white h-full shrink-0 lg:shrink`}>
                 <div className="p-3 md:p-4 border-b bg-gray-50">
                   <input
                     type="text"
                     placeholder="Pesquisar produto no catálogo..."
-                    className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none text-base md:text-sm focus:ring-2 focus:ring-cafe-primary bg-white shadow-sm"
+                    className="w-full p-3.5 md:p-2.5 border border-gray-300 rounded-lg outline-none text-base md:text-sm focus:ring-2 focus:ring-cafe-primary bg-white shadow-sm"
                     value={termoBuscaLote}
                     onChange={(e) => setTermoBuscaLote(e.target.value)}
                   />
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2">
+                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 pb-24 lg:pb-4 custom-scrollbar">
                   {produtosFiltradosLote.map((p) => {
                     const noCarrinho = carrinhoLote.some(i => i.produtoId === p.id);
                     return (
-                      <div key={p.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition gap-2 ${noCarrinho ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200 hover:border-blue-400 shadow-sm'}`}>
+                      <div key={p.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 md:p-3 rounded-xl border transition gap-2 ${noCarrinho ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200 hover:border-blue-400 shadow-sm'}`}>
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-sm block text-gray-800 truncate">{p.nome}</span>
+                          <span className="font-bold text-base md:text-sm block text-gray-800 truncate">{p.nome}</span>
                           <span className="text-xs text-gray-500 font-medium block mt-0.5">Estoque atual: <strong className="text-gray-700">{p.quantidade_estoque || 0}</strong> {p.unidade_medida}</span>
                         </div>
                         <button
                           disabled={noCarrinho}
                           onClick={() => adicionarAoLote(p)}
-                          className={`w-full sm:w-auto px-4 py-2 sm:py-1.5 text-sm sm:text-xs font-bold rounded-lg shadow-sm transition ${noCarrinho ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 active:scale-95'}`}
+                          className={`w-full sm:w-auto px-4 py-3 sm:py-1.5 text-sm sm:text-xs font-bold rounded-lg shadow-sm transition ${noCarrinho ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 active:scale-95'}`}
                         >
                           {noCarrinho ? 'No Carrinho' : '+ Adicionar'}
                         </button>
@@ -327,39 +430,49 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                   })}
                   {produtosFiltradosLote.length === 0 && <p className="text-center text-gray-400 italic text-sm mt-6">Produto não encontrado.</p>}
                 </div>
+
+                {/* Botão flutuante mobile para ir ao carrinho rapidamente */}
+                {abaLoteMobile === 'busca' && carrinhoLote.length > 0 && (
+                  <div className="lg:hidden absolute bottom-4 left-4 right-4 z-50">
+                    <button onClick={() => setAbaLoteMobile('carrinho')} className="w-full bg-green-600 text-white font-black py-4 rounded-xl shadow-[0_4px_14px_0_rgba(22,163,74,0.39)] hover:bg-green-700 active:scale-95 transition flex justify-center items-center gap-2">
+                      Ver Carrinho ({carrinhoLote.length}) e Pagar
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* DIREITA: CARRINHO E FORMULÁRIO FINANCEIRO */}
-              <div className="w-full lg:w-1/2 flex flex-col bg-gray-50 flex-1 overflow-hidden">
-                <div className="p-3 bg-gray-200 border-b flex justify-between items-center shadow-inner">
+              <div className={`${abaLoteMobile === 'carrinho' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 flex-col bg-gray-50 flex-1 h-full overflow-hidden shrink-0 lg:shrink`}>
+                <div className="hidden lg:flex p-3 bg-gray-200 border-b justify-between items-center shadow-inner shrink-0">
                   <span className="text-xs font-black text-gray-600 uppercase tracking-widest">🛒 Itens Selecionados</span>
                   <span className="text-xs font-bold bg-gray-500 text-white px-2 py-0.5 rounded-full">{carrinhoLote.length}</span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 custom-scrollbar min-h-[20vh]">
                   {carrinhoLote.length === 0 ? (
                     <div className="text-center py-10 md:py-20 opacity-40 flex flex-col items-center">
                       <span className="text-5xl mb-3 grayscale">📦</span>
                       <p className="text-sm font-bold text-gray-600 uppercase">O carrinho está vazio</p>
+                      <button onClick={() => setAbaLoteMobile('busca')} className="lg:hidden mt-4 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-bold text-xs">Voltar à Busca</button>
                     </div>
                   ) : (
                     carrinhoLote.map(item => (
-                      <div key={item.produtoId} className="bg-white p-3 border rounded-xl shadow-sm relative group">
+                      <div key={item.produtoId} className="bg-white p-3.5 md:p-3 border rounded-xl shadow-sm relative group">
                         <button onClick={() => removerDoLote(item.produtoId)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 font-black w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-red-50 rounded-lg transition">✕</button>
                         <p className="font-bold text-sm mb-3 pr-10 text-gray-800">{item.nome}</p>
 
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Qtd (Compra)</label>
-                            <input type="number" min="1" value={item.qtd} onChange={e => atualizarLote(item.produtoId, 'qtd', e.target.value)} className="w-full p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50 text-center" />
+                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Qtd</label>
+                            <input type="number" min="1" value={item.qtd} onChange={e => atualizarLote(item.produtoId, 'qtd', e.target.value)} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50 text-center" />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Custo Un. (R$)</label>
-                            <input type="number" min="0" value={item.custoUnitario} onChange={e => atualizarLote(item.produtoId, 'custoUnitario', e.target.value)} className="w-full p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-700" />
+                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Custo (R$)</label>
+                            <input type="number" min="0" value={item.custoUnitario} onChange={e => atualizarLote(item.produtoId, 'custoUnitario', e.target.value)} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-700" />
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Venda (R$)</label>
-                            <input type="number" min="0" value={item.precoVenda} onChange={e => atualizarLote(item.produtoId, 'precoVenda', e.target.value)} className="w-full p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-green-50 text-green-700" />
+                            <input type="number" min="0" value={item.precoVenda} onChange={e => atualizarLote(item.produtoId, 'precoVenda', e.target.value)} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-green-50 text-green-700" />
                           </div>
                         </div>
                       </div>
@@ -368,58 +481,85 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                 </div>
 
                 {/* PAINEL DE CHECKOUT / FINANCEIRO */}
-                <div className="bg-white border-t p-4 md:p-5 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10 shrink-0">
+                <div className="bg-white border-t p-4 md:p-5 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10 shrink-0 pb-safe-bottom">
                   <div className="flex justify-between items-end mb-3 border-b pb-3">
                     <div>
                       <span className="block text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Custo Total do Lote</span>
-                      <span className="text-2xl md:text-3xl font-black text-red-600">{formatarMoeda(carrinhoLote.reduce((acc, item) => acc + (Number(item.qtd) * Number(item.custoUnitario)), 0))}</span>
+                      <span className="text-2xl md:text-3xl font-black text-red-600">{formatarMoeda(totalCustoLote)}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-3 mb-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
+                  {/* Seletor de Modo de Pagamento */}
+                  <div className="flex bg-gray-100 p-1 rounded-lg mb-3">
+                    <button onClick={() => setModoPagamentoLote('unico')} className={`flex-1 text-xs md:text-sm py-2.5 md:py-2 font-bold rounded-lg transition ${modoPagamentoLote === 'unico' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Pagamento Único</button>
+                    <button onClick={() => setModoPagamentoLote('misto')} className={`flex-1 text-xs md:text-sm py-2.5 md:py-2 font-bold rounded-lg transition ${modoPagamentoLote === 'misto' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Combinar Formas</button>
+                  </div>
+
+                  <div className="space-y-3 mb-4 max-h-[35vh] lg:max-h-[25vh] overflow-y-auto pr-1 custom-scrollbar">
+
+                    {/* Pagamento Único */}
+                    {modoPagamentoLote === 'unico' && (
+                      <div className="animate-fade-in">
                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Forma de Pagamento</label>
-                        <select className="w-full p-3 md:p-2.5 border rounded-lg bg-gray-50 outline-none text-base md:text-xs font-bold text-gray-700 cursor-pointer" value={metodoPagamentoLote} onChange={(e) => setMetodoPagamentoLote(e.target.value)}>
+                        <select className="w-full p-3.5 md:p-2.5 border rounded-lg bg-gray-50 outline-none text-base md:text-sm font-bold text-gray-700 cursor-pointer focus:ring-2 focus:ring-blue-300" value={metodoPagamentoLote} onChange={(e) => setMetodoPagamentoLote(e.target.value)}>
                           <option value="PIX">📱 PIX (Debita Banco)</option>
                           <option value="Dinheiro">💵 Dinheiro (Gaveta)</option>
                           <option value="Cartão de Débito">💳 Débito</option>
                           <option value="Cartão de Crédito">💳 Crédito</option>
-                          <option value="Conta a Pagar">⏳ A Prazo (Conta Pagar)</option>
+                          <option value="Transferência">🏦 Transferência</option>
+                          <option value="Conta a Pagar">⏳ A Prazo (Conta a Pagar)</option>
                         </select>
                       </div>
+                    )}
 
-                      {metodoPagamentoLote === 'Conta a Pagar' ? (
-                        <div className="animate-fade-in">
-                          <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Vencimento</label>
-                          <input type="date" className="w-full p-3 md:p-2.5 border rounded-lg bg-white outline-none text-base md:text-xs font-bold border-red-200 text-red-700" value={dataVencimentoLote} onChange={(e) => setDataVencimentoLote(e.target.value)} />
+                    {/* Pagamento Misto */}
+                    {modoPagamentoLote === 'misto' && (
+                      <div className="space-y-2 border p-3 rounded-xl bg-gray-50 animate-fade-in">
+                        {pagamentosMistosLote.map((pm, index) => (
+                          <div key={index} className="flex gap-2 items-center">
+                            <select className="flex-1 p-2.5 md:p-2 border rounded-lg font-semibold text-base md:text-sm bg-white outline-none focus:ring-2 focus:ring-blue-300" value={pm.metodo} onChange={(e) => { const n = [...pagamentosMistosLote]; n[index].metodo = e.target.value; setPagamentosMistosLote(n); }}>
+                              <option value="PIX">PIX</option>
+                              <option value="Dinheiro">Dinheiro</option>
+                              <option value="Cartão de Crédito">Crédito</option>
+                              <option value="Cartão de Débito">Débito</option>
+                              <option value="Transferência">Transf.</option>
+                              <option value="Conta a Pagar">A Prazo</option>
+                            </select>
+                            <input type="number" placeholder="R$" className="w-24 md:w-28 p-2.5 md:p-2 border rounded-lg font-bold text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-300" value={pm.valor} onChange={(e) => { const n = [...pagamentosMistosLote]; n[index].valor = Number(e.target.value); setPagamentosMistosLote(n); }} />
+                            {index > 0 && <button onClick={() => setPagamentosMistosLote(pagamentosMistosLote.filter((_, i) => i !== index))} className="w-9 h-9 md:w-8 md:h-8 flex items-center justify-center text-red-500 font-black bg-white border rounded-lg shadow-sm hover:bg-red-50">✕</button>}
+                          </div>
+                        ))}
+                        <button onClick={() => setPagamentosMistosLote([...pagamentosMistosLote, { metodo: 'Cartão de Crédito', valor: '' }])} className="w-full text-xs font-bold text-blue-600 py-3 md:py-2 bg-white border border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition">+ Adicionar Forma</button>
+
+                        <div className="flex justify-between text-xs font-bold mt-2 pt-2 border-t border-gray-200">
+                          <span className={faltaPagarMistoLote > 0 ? 'text-red-500' : 'text-gray-500'}>Falta: {formatarMoeda(faltaPagarMistoLote)}</span>
+                          <span className={trocoMistoLote > 0 ? 'text-blue-600' : 'text-gray-500'}>Troco: {formatarMoeda(trocoMistoLote)}</span>
                         </div>
-                      ) : (
+                      </div>
+                    )}
+
+                    {/* Vencimento e Fornecedor Dinâmico */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
+                      {mostraVencimentoLote && (
                         <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fornecedor (Opcional)</label>
-                          <select className="w-full p-3 md:p-2.5 border rounded-lg bg-gray-50 outline-none text-base md:text-xs text-gray-600 cursor-pointer" value={fornecedorLoteId} onChange={(e) => setFornecedorLoteId(e.target.value)}>
-                            <option value="">Sem fornecedor...</option>
-                            {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-                          </select>
+                          <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Vencimento (A Prazo)</label>
+                          <input type="date" className="w-full p-3.5 md:p-2 border rounded-lg bg-white outline-none text-base md:text-sm font-bold border-red-200 text-red-700 focus:ring-2 focus:ring-red-400" value={dataVencimentoLote} onChange={(e) => setDataVencimentoLote(e.target.value)} />
                         </div>
                       )}
-                    </div>
-
-                    {metodoPagamentoLote === 'Conta a Pagar' && (
-                      <div>
+                      <div className={mostraVencimentoLote ? "" : "sm:col-span-2"}>
                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fornecedor (Opcional)</label>
-                        <select className="w-full p-3 md:p-2 border rounded-lg bg-gray-50 outline-none text-base md:text-xs text-gray-600 cursor-pointer" value={fornecedorLoteId} onChange={(e) => setFornecedorLoteId(e.target.value)}>
+                        <select className="w-full p-3.5 md:p-2 border rounded-lg bg-gray-50 outline-none text-base md:text-sm text-gray-600 cursor-pointer" value={fornecedorLoteId} onChange={(e) => setFornecedorLoteId(e.target.value)}>
                           <option value="">Sem fornecedor...</option>
                           {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                         </select>
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   <button
                     onClick={salvarEntradasEmLote}
                     disabled={carregando}
-                    className="w-full py-4 md:py-3.5 bg-green-600 text-white font-black uppercase tracking-widest rounded-xl text-sm shadow-lg hover:bg-green-700 active:scale-95 transition disabled:opacity-50"
+                    className="w-full py-4 bg-green-600 text-white font-black uppercase tracking-widest rounded-xl text-sm shadow-lg hover:bg-green-700 active:scale-95 transition disabled:opacity-50 mt-1"
                   >
                     {carregando ? 'A Processar...' : 'Confirmar Compra'}
                   </button>

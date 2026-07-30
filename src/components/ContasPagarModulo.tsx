@@ -53,6 +53,13 @@ export default function ContasPagarModulo() {
     const [diaVencimentoRecorrente, setDiaVencimentoRecorrente] = useState<number | ''>('');
     const [numMeses, setNumMeses] = useState<number | ''>(2);
 
+    // ESTADOS PARA EDIÇÃO DE CONTA
+    const [contaParaEditar, setContaParaEditar] = useState<Conta | null>(null);
+    const [editDescricao, setEditDescricao] = useState('');
+    const [editFornecedorId, setEditFornecedorId] = useState('');
+    const [editValor, setEditValor] = useState<number | ''>('');
+    const [editDataVencimento, setEditDataVencimento] = useState('');
+
     const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
     const [contaParaApagar, setContaParaApagar] = useState<Conta | null>(null);
     const [contaParaPagar, setContaParaPagar] = useState<Conta | null>(null);
@@ -434,6 +441,40 @@ export default function ContasPagarModulo() {
         } catch (error) { mostrarMensagem('Erro ao processar lançamento.', 'erro'); }
     };
 
+    // FUNÇÕES DE EDIÇÃO DE CONTA
+    const abrirModalEdicao = (conta: Conta) => {
+        setContaParaEditar(conta);
+        setEditDescricao(conta.descricao);
+        setEditFornecedorId(conta.fornecedor_id || '');
+        setEditValor(conta.valor);
+        setEditDataVencimento(conta.data_vencimento);
+    };
+
+    const salvarEdicaoConta = async () => {
+        if (!contaParaEditar) return;
+        if (!editDescricao || !editValor || !editDataVencimento) {
+            return mostrarMensagem('Preencha descrição, valor e vencimento.', 'aviso');
+        }
+
+        try {
+            const { error } = await supabase.from('contas_pagar').update({
+                descricao: editDescricao,
+                fornecedor_id: editFornecedorId || null,
+                valor: Number(editValor),
+                data_vencimento: editDataVencimento
+            }).eq('id', contaParaEditar.id);
+
+            if (error) throw error;
+
+            mostrarMensagem('Conta atualizada com sucesso!', 'sucesso');
+            carregarDados();
+        } catch (error) {
+            mostrarMensagem('Erro ao atualizar a conta.', 'erro');
+        } finally {
+            setContaParaEditar(null);
+        }
+    };
+
     const confirmarPagamento = async () => {
         if (!contaParaPagar) return;
 
@@ -527,6 +568,46 @@ export default function ContasPagarModulo() {
                         <div className="flex gap-3">
                             <button onClick={() => setModalAjusteBanco(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 md:py-2 rounded-xl font-bold text-sm transition">Cancelar</button>
                             <button onClick={salvarAjusteBanco} className="flex-1 bg-blue-600 text-white py-3 md:py-2 rounded-xl font-bold text-sm hover:bg-blue-700 shadow-md transition active:scale-95">Salvar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL: EDIÇÃO DE CONTA */}
+            {contaParaEditar && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border">
+                        <h3 className="text-xl font-black text-blue-900 mb-4 border-b pb-2">✏️ Editar Conta</h3>
+
+                        <div className="space-y-4 mb-6">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                                <input type="text" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-sm bg-gray-50" value={editDescricao} onChange={(e) => setEditDescricao(e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fornecedor</label>
+                                <select className="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-400 text-sm" value={editFornecedorId} onChange={(e) => setEditFornecedorId(e.target.value)}>
+                                    <option value="">Sem fornecedor...</option>
+                                    {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor (R$)</label>
+                                    <input type="number" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-sm font-bold bg-gray-50" value={editValor} onChange={(e) => setEditValor(e.target.value === '' ? '' : Number(e.target.value))} />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vencimento</label>
+                                    <input type="date" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-sm bg-gray-50" value={editDataVencimento} onChange={(e) => setEditDataVencimento(e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button onClick={() => setContaParaEditar(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold transition text-sm">Cancelar</button>
+                            <button onClick={salvarEdicaoConta} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-md transition active:scale-95 text-sm">Salvar Alterações</button>
                         </div>
                     </div>
                 </div>
@@ -925,7 +1006,10 @@ export default function ContasPagarModulo() {
                                     </div>
                                     <div className="flex justify-between items-end pt-2 border-t border-gray-100 mt-1">
                                         <span className="font-black text-xl text-cafe-dark">{formatarMoeda(conta.valor)}</span>
-                                        <button onClick={() => setContaParaPagar(conta)} className="bg-green-50 text-green-700 font-bold px-4 py-2.5 rounded-lg border border-green-200 shadow-sm active:scale-95 transition text-sm">Dar Baixa</button>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => abrirModalEdicao(conta)} className="bg-blue-50 text-blue-700 font-bold px-3 py-2.5 rounded-lg border border-blue-200 shadow-sm active:scale-95 transition text-sm">Editar</button>
+                                            <button onClick={() => setContaParaPagar(conta)} className="bg-green-50 text-green-700 font-bold px-4 py-2.5 rounded-lg border border-green-200 shadow-sm active:scale-95 transition text-sm">Dar Baixa</button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -945,6 +1029,7 @@ export default function ContasPagarModulo() {
                                             <td className="p-4"><span className="font-bold text-gray-800 block">{conta.descricao}</span>{conta.fornecedores?.nome && <span className="text-xs text-gray-500 font-semibold">{conta.fornecedores.nome}</span>}</td>
                                             <td className="p-4 font-black text-gray-800 text-right text-base">{formatarMoeda(conta.valor)}</td>
                                             <td className="p-4 text-center space-x-2">
+                                                <button onClick={() => abrirModalEdicao(conta)} className="text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 font-bold text-xs border border-blue-200 transition shadow-sm">Editar</button>
                                                 <button onClick={() => setContaParaPagar(conta)} className="text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100 font-bold text-xs border border-green-200 transition shadow-sm">Dar Baixa</button>
                                                 <button onClick={() => setContaParaApagar(conta)} className="text-gray-400 font-black hover:text-red-500 text-base px-2 py-1 bg-gray-50 rounded-lg transition">✕</button>
                                             </td>
