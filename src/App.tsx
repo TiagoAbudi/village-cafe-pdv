@@ -40,46 +40,110 @@ function App() {
     await supabase.auth.signOut();
   };
 
-  if (carregandoAuth) return <div className="min-h-screen bg-cafe-bg flex items-center justify-center font-bold text-cafe-primary">Carregando Sistema...</div>;
+  if (carregandoAuth) {
+    return (
+      <div className="min-h-screen bg-cafe-bg flex flex-col items-center justify-center">
+        <div className="w-16 h-16 border-4 border-cafe-secondary border-t-cafe-primary rounded-full animate-spin mb-4"></div>
+        <div className="font-black text-cafe-primary uppercase tracking-widest animate-pulse">Carregando Sistema...</div>
+      </div>
+    );
+  }
 
   if (!session) return <Login />;
 
-  // NOVO: Captura o nome definido no metadata ou usa o e-mail do funcionário logado
   const atendenteNome = session.user.user_metadata?.nome || session.user.email || 'Desconhecido';
 
   return (
     <div className="min-h-screen bg-cafe-bg text-cafe-dark font-sans flex flex-col">
       <AlertasGlobaisProvider />
-      <header className="bg-cafe-primary text-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-4">
 
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="Logo Village Cafe" className="h-10 w-auto drop-shadow-sm" />
-            <h1 className="text-xl font-bold tracking-wider uppercase hidden sm:block">Village Cafe</h1>
+      {/* HEADER REDESENHADO PARA MOBILE E DESKTOP */}
+      <header className="bg-cafe-primary text-white shadow-md z-50 sticky top-0">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+
+          {/* Linha 1: Logo e Controle de Usuário */}
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Logo Village Cafe" className="h-8 md:h-10 w-auto drop-shadow-sm" />
+              <h1 className="text-lg md:text-xl font-black tracking-widest uppercase hidden sm:block">Village Cafe</h1>
+            </div>
+
+            <div className="flex items-center gap-3 md:gap-4 bg-cafe-dark/30 py-1.5 px-3 md:px-4 rounded-xl border border-cafe-dark/50">
+              <span className="text-[10px] md:text-xs font-bold text-cafe-secondary uppercase tracking-wider hidden sm:block">
+                Conectado: <strong className="text-white ml-1">{atendenteNome}</strong>
+              </span>
+              <span className="text-[10px] font-bold text-white uppercase tracking-wider sm:hidden">
+                {atendenteNome.split(' ')[0]}
+              </span>
+              <div className="w-[1px] h-4 bg-cafe-secondary/30"></div>
+              <button onClick={handleLogout} className="text-[10px] md:text-xs text-red-400 hover:text-red-300 font-black uppercase tracking-wider transition-colors">
+                Sair
+              </button>
+            </div>
           </div>
 
-          <nav className="flex items-center gap-1 bg-cafe-dark/40 p-1 rounded-lg w-full sm:w-auto overflow-x-auto text-sm">
-            <button onClick={() => setAbaAtiva('pdv')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'pdv' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>PDV Caixa</button>
-            <button onClick={() => setAbaAtiva('comandas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'comandas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Comandas</button>
-            <button onClick={() => setAbaAtiva('dashboard')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'dashboard' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Dashboard</button>
-            <button onClick={() => setAbaAtiva('precificacao')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'precificacao' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Fichas</button>
-            <button onClick={() => setAbaAtiva('revenda')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'revenda' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Revenda</button>
-            <button onClick={() => setAbaAtiva('entradas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'entradas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Estoque</button>
-            <button onClick={() => setAbaAtiva('financeiro')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'financeiro' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Financeiro</button>
-            <button onClick={() => setAbaAtiva('rendimentos')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'rendimentos' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Rendimentos</button>
-            <button onClick={() => setAbaAtiva('relatorio-vendas')} className={`px-3 py-2 font-semibold rounded-md transition-all whitespace-nowrap ${abaAtiva === 'relatorio-vendas' ? 'bg-cafe-secondary text-cafe-dark shadow' : 'text-gray-300 hover:text-white'}`}>Relatório de Vendas</button>
+          {/* Linha 2: Navegação com Scroll Horizontal Fio (Esconde a barra de rolagem nativa) */}
+          <nav className="flex items-center gap-2 overflow-x-auto w-full pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <button
+              onClick={() => setAbaAtiva('pdv')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'pdv' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              PDV Caixa
+            </button>
+            <button
+              onClick={() => setAbaAtiva('comandas')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'comandas' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Comandas
+            </button>
+            <button
+              onClick={() => setAbaAtiva('dashboard')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'dashboard' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setAbaAtiva('precificacao')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'precificacao' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Fichas
+            </button>
+            <button
+              onClick={() => setAbaAtiva('revenda')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'revenda' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Revenda
+            </button>
+            <button
+              onClick={() => setAbaAtiva('entradas')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'entradas' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Estoque
+            </button>
+            <button
+              onClick={() => setAbaAtiva('financeiro')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'financeiro' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Financeiro
+            </button>
+            <button
+              onClick={() => setAbaAtiva('rendimentos')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'rendimentos' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Rendimentos
+            </button>
+            <button
+              onClick={() => setAbaAtiva('relatorio-vendas')}
+              className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all whitespace-nowrap uppercase tracking-wider ${abaAtiva === 'relatorio-vendas' ? 'bg-cafe-secondary text-cafe-dark shadow-md scale-105' : 'bg-cafe-dark/40 text-gray-300 hover:bg-cafe-dark/60 hover:text-white'}`}
+            >
+              Vendas
+            </button>
           </nav>
-
-          {/* ATUALIZADO: Mostra um alô para o atendente logado ao lado do botão Sair */}
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-300 hidden md:inline">Olá, <strong className="text-white">{atendenteNome}</strong></span>
-            <button onClick={handleLogout} className="text-xs bg-red-600 hover:bg-red-700 px-3 py-2 rounded font-bold shadow transition-colors whitespace-nowrap">Sair</button>
-          </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-        {/* ATUALIZADO: Passando o atendente ativo para dentro do módulo do PDV */}
+      {/* ÁREA PRINCIPAL DO SISTEMA */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2 md:px-4 py-4 md:py-6 overflow-x-hidden">
         {abaAtiva === 'pdv' && <PDVModulo atendente={atendenteNome} />}
         {abaAtiva === 'dashboard' && <DashboardModulo />}
         {abaAtiva === 'precificacao' && <PrecificacaoModulo />}

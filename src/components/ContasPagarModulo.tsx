@@ -120,7 +120,6 @@ export default function ContasPagarModulo() {
     };
     const formatarDataHora = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-    // LÓGICA INFALÍVEL DE SOMA DE VENDAS
     const totaisVendas = useMemo(() => {
         let pix = 0, din = 0, cred = 0, deb = 0, total = 0;
 
@@ -153,7 +152,6 @@ export default function ContasPagarModulo() {
         return { pix, din, cred, deb, total };
     }, [vendasHoje]);
 
-    // CÁLCULO DINÂMICO E EXATO DO CAIXA FÍSICO
     const dinheiroEmCaixa = useMemo(() => {
         if (!caixaAtivo) return 0;
         const suprimentos = movimentacoesCaixa.filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + Number(m.valor), 0);
@@ -195,14 +193,11 @@ export default function ContasPagarModulo() {
             const dataFimFiltro = caixa.data_fechamento || new Date().toISOString();
 
             const { data: vendas } = await supabase.from('vendas').select('*').gte('data_venda', caixa.data_abertura).lte('data_venda', dataFimFiltro).order('data_venda', { ascending: true });
-
-            // CORREÇÃO: Utilizando a coluna 'data_movimento' correta que consta no seu banco de dados
             const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixa.id).order('data_movimento', { ascending: true });
 
             const vHoje = vendas || [];
             const mHoje = movs || [];
 
-            // Separando as movimentações para as listas detalhadas
             const listaSuprimentos = mHoje.filter(m => m.tipo === 'suprimento');
             const listaSangrias = mHoje.filter(m => m.tipo === 'sangria' || m.tipo === 'despesa');
 
@@ -246,7 +241,6 @@ export default function ContasPagarModulo() {
                 dinheiroEsperado,
                 valorFechamentoReal,
                 diferenca,
-                // Listas detalhadas para a UI
                 listaVendas: vHoje,
                 listaSuprimentos,
                 listaSangrias
@@ -273,7 +267,6 @@ export default function ContasPagarModulo() {
         const doc = iframe.contentWindow?.document || iframe.contentDocument;
         if (!doc) return;
 
-        // Gerando HTML das listas para impressão
         let detalhesHtml = '';
         if (detalhesRelatorio.listaSuprimentos.length > 0) {
             detalhesHtml += `<div class="line"></div><div class="font-bold text-center" style="margin:4px 0;">+ SUPRIMENTOS DETALHADOS</div>`;
@@ -507,31 +500,33 @@ export default function ContasPagarModulo() {
     if (carregando) return <div className="text-center py-10 font-bold text-cafe-primary animate-pulse">A carregar o financeiro...</div>;
 
     return (
-        <div className="max-w-6xl mx-auto p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-8 relative">
+        <div className="max-w-7xl mx-auto p-4 md:p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-4 md:my-8 relative">
+            {/* FEEDBACK TOAST */}
             {feedback.tipo && (
-                <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg transition-all ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : feedback.tipo === 'erro' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                    <span className="font-semibold">{feedback.msg}</span>
+                <div className={`fixed top-4 right-4 z-[200] px-4 py-3 rounded-lg shadow-lg transition-all ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : feedback.tipo === 'erro' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    <span className="font-semibold text-sm">{feedback.msg}</span>
                 </div>
             )}
 
             {/* MODAL: AJUSTE DE BANCO DIGITAL */}
             {modalAjusteBanco && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-                        <h3 className="text-xl font-bold text-blue-900 mb-2">🏦 Ajustar Saldo do Banco</h3>
-                        <p className="text-gray-600 mb-4 text-sm">Informe o valor exato que consta na conta bancária/PIX da empresa no momento.</p>
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border">
+                        <h3 className="text-xl font-black text-blue-900 mb-2">🏦 Ajustar Saldo Digital</h3>
+                        <p className="text-gray-600 mb-6 text-sm">Informe o valor exato que consta na conta bancária/PIX da empresa no momento.</p>
                         <div className="mb-6">
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Novo Saldo Digital (R$)</label>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Novo Saldo Digital (R$)</label>
                             <input
                                 type="number"
-                                className="w-full p-3 border border-gray-300 rounded bg-white outline-none font-bold text-center text-lg text-blue-800 focus:border-blue-500"
+                                className="w-full p-4 border-2 border-gray-200 rounded-xl bg-white outline-none font-black text-center text-2xl text-blue-800 focus:border-blue-500 text-base"
                                 value={novoSaldoBanco}
                                 onChange={(e) => setNovoSaldoBanco(e.target.value === '' ? '' : Number(e.target.value))}
+                                autoFocus
                             />
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={() => setModalAjusteBanco(false)} className="flex-1 bg-gray-100 py-2 rounded font-semibold text-sm">Cancelar</button>
-                            <button onClick={salvarAjusteBanco} className="flex-1 bg-blue-600 text-white py-2 rounded font-semibold text-sm hover:bg-blue-700">Salvar Ajuste</button>
+                            <button onClick={() => setModalAjusteBanco(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 md:py-2 rounded-xl font-bold text-sm transition">Cancelar</button>
+                            <button onClick={salvarAjusteBanco} className="flex-1 bg-blue-600 text-white py-3 md:py-2 rounded-xl font-bold text-sm hover:bg-blue-700 shadow-md transition active:scale-95">Salvar</button>
                         </div>
                     </div>
                 </div>
@@ -539,124 +534,121 @@ export default function ContasPagarModulo() {
 
             {/* MODAL: HISTÓRICO DE TURNOS */}
             {modalHistoricoOpen && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700">
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-2 md:p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl h-[95vh] md:h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700">
 
-                        <div className="p-5 bg-gray-50 dark:bg-gray-900 border-b flex justify-between items-center">
+                        <div className="p-4 md:p-5 bg-gray-50 dark:bg-gray-900 border-b flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-lg font-black text-gray-800 dark:text-white">Auditoria e Histórico de Turnos</h3>
-                                <p className="text-xs text-gray-400">Inspecione relatórios de abertura, fechamento e detalhamento de entradas e saídas</p>
+                                <h3 className="text-lg font-black text-gray-800 dark:text-white leading-tight">Auditoria e Histórico de Turnos</h3>
+                                <p className="text-xs text-gray-500 hidden md:block">Inspecione relatórios de abertura, fechamento e detalhamento de entradas e saídas</p>
                             </div>
-                            <button onClick={() => setModalHistoricoOpen(false)} className="text-gray-400 hover:text-red-500 font-bold text-2xl">×</button>
+                            <button onClick={() => setModalHistoricoOpen(false)} className="text-gray-400 hover:text-red-500 font-black text-2xl px-2">✕</button>
                         </div>
 
-                        <div className="flex-1 flex overflow-hidden">
-                            {/* Lateral Esquerda: Turnos */}
-                            <div className="w-1/3 border-r overflow-y-auto bg-gray-50/50 custom-scrollbar">
+                        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                            {/* Lateral Esquerda: Turnos (Em cima no Mobile) */}
+                            <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r overflow-y-auto bg-gray-50/50 custom-scrollbar h-[35vh] lg:h-auto shrink-0">
                                 {listaCaixas.map((c) => (
                                     <div
                                         key={c.id}
                                         onClick={() => carregarRelatorioTurno(c)}
-                                        className={`p-4 border-b cursor-pointer transition flex flex-col gap-1 hover:bg-gray-100 dark:hover:bg-gray-700/50 ${caixaSelecionado?.id === c.id ? 'bg-blue-50/60 dark:bg-gray-700 border-l-4 border-l-cafe-primary' : ''}`}
+                                        className={`p-3 md:p-4 border-b cursor-pointer transition flex flex-col gap-1 hover:bg-gray-100 dark:hover:bg-gray-700/50 ${caixaSelecionado?.id === c.id ? 'bg-blue-50/60 dark:bg-gray-700 border-l-4 border-l-cafe-primary' : ''}`}
                                     >
                                         <div className="flex justify-between items-center">
                                             <span className="text-xs font-bold text-gray-500">Caixa: #{c.id.substring(0, 5)}</span>
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${c.status === 'aberto' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
-                                                {c.status.toUpperCase()}
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${c.status === 'aberto' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
+                                                {c.status}
                                             </span>
                                         </div>
-                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Abertura: {formatarDataHora(c.data_abertura)}</span>
-                                        <span className="text-xs font-semibold text-gray-400">Fundo Inicial: {formatarMoeda(c.fundo_inicial)}</span>
+                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{formatarDataHora(c.data_abertura)}</span>
+                                        <span className="text-xs font-semibold text-gray-500">Fundo Inicial: {formatarMoeda(c.fundo_inicial)}</span>
                                     </div>
                                 ))}
                             </div>
 
                             {/* Lateral Direita: Painel Demonstrativo e Detalhamento */}
-                            <div className="w-2/3 p-6 overflow-y-auto custom-scrollbar bg-white dark:bg-gray-800 flex flex-col">
+                            <div className="w-full lg:w-2/3 p-4 md:p-6 overflow-y-auto custom-scrollbar bg-white dark:bg-gray-800 flex-1">
                                 {caixaSelecionado ? (
                                     carregandoRelatorio ? (
                                         <div className="text-center py-20 font-bold text-cafe-primary animate-pulse">A extrair relatório completo...</div>
                                     ) : detalhesRelatorio && (
                                         <div className="space-y-6">
                                             {/* Cabeçalho do Relatório */}
-                                            <div className="flex justify-between items-center border-b pb-3">
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
                                                 <div>
-                                                    <h4 className="text-base font-black text-gray-800 dark:text-white">Extrato Consolidado do Turno</h4>
-                                                    <p className="text-xs text-gray-400">Resumo financeiro e conciliação da gaveta</p>
+                                                    <h4 className="text-base font-black text-gray-800 dark:text-white uppercase tracking-wider">Extrato Consolidado</h4>
+                                                    <p className="text-xs text-gray-500">Resumo financeiro e conciliação da gaveta</p>
                                                 </div>
-                                                <button onClick={handleImprimirRelatorioTurno} className="bg-gray-900 text-white text-xs font-bold px-4 py-2 rounded-xl shadow hover:bg-gray-800 transition flex items-center gap-1.5">
-                                                    🖨️ Imprimir Fechamento Completo
+                                                <button onClick={handleImprimirRelatorioTurno} className="w-full sm:w-auto bg-gray-900 text-white text-xs font-bold px-4 py-3 md:py-2 rounded-xl shadow-md hover:bg-gray-800 transition active:scale-95 flex items-center justify-center gap-2">
+                                                    🖨️ Imprimir Fechamento
                                                 </button>
                                             </div>
 
                                             {/* Bloco Dinheiro Fisico */}
                                             <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 space-y-2.5 text-sm">
-                                                <h5 className="text-xs font-black text-gray-400 uppercase tracking-wider">Gaveta de Dinheiro Físico</h5>
-                                                <div className="flex justify-between"><span>(+) Fundo Inicial de Abertura:</span><span className="font-medium">{formatarMoeda(caixaSelecionado.fundo_inicial)}</span></div>
-                                                <div className="flex justify-between"><span>(+) Entradas (Vendas em Dinheiro):</span><span className="font-medium text-green-600">{formatarMoeda(detalhesRelatorio.totalDinheiro)}</span></div>
-                                                <div className="flex justify-between"><span>(+) Suprimentos (Aportes):</span><span className="font-medium text-green-600">{formatarMoeda(detalhesRelatorio.suprimentos)}</span></div>
-                                                <div className="flex justify-between"><span>(-) Sangrias / Despesas do Caixa:</span><span className="font-medium text-red-500">-{formatarMoeda(detalhesRelatorio.sangrias)}</span></div>
-                                                <div className="flex justify-between font-bold pt-2 border-t mt-2 text-gray-800 dark:text-white"><span>= Saldo Esperado em Sistema:</span><span>{formatarMoeda(detalhesRelatorio.dinheiroEsperado)}</span></div>
+                                                <h5 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Gaveta de Dinheiro Físico</h5>
+                                                <div className="flex justify-between"><span>(+) Fundo Abertura:</span><span className="font-bold text-gray-700 dark:text-gray-200">{formatarMoeda(caixaSelecionado.fundo_inicial)}</span></div>
+                                                <div className="flex justify-between"><span>(+) Vendas (Dinheiro):</span><span className="font-bold text-green-600">{formatarMoeda(detalhesRelatorio.totalDinheiro)}</span></div>
+                                                <div className="flex justify-between"><span>(+) Suprimentos:</span><span className="font-bold text-green-600">{formatarMoeda(detalhesRelatorio.suprimentos)}</span></div>
+                                                <div className="flex justify-between"><span>(-) Sangrias/Despesas:</span><span className="font-bold text-red-500">-{formatarMoeda(detalhesRelatorio.sangrias)}</span></div>
+                                                <div className="flex justify-between font-black pt-3 border-t border-gray-200 dark:border-gray-600 mt-2 text-gray-800 dark:text-white text-base"><span>= Saldo Esperado:</span><span className="text-cafe-primary dark:text-cafe-secondary">{formatarMoeda(detalhesRelatorio.dinheiroEsperado)}</span></div>
                                             </div>
 
                                             {/* DETALHE DE FECHAMENTO E CONFERÊNCIA */}
                                             {caixaSelecionado.status === 'fechado' && (
-                                                <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 space-y-2.5 text-sm shadow-sm">
-                                                    <h5 className="text-xs font-black text-gray-400 uppercase tracking-wider">Conferência de Encerramento</h5>
-                                                    <div className="flex justify-between"><span>📢 Valor Real Informado no Fechamento:</span><span className="font-bold text-gray-800 dark:text-white">{formatarMoeda(detalhesRelatorio.valorFechamentoReal)}</span></div>
-                                                    <div className="flex justify-between items-center pt-2 border-t">
-                                                        <span>⚠️ Resultado / Diferença:</span>
+                                                <div className="p-4 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 space-y-3 text-sm shadow-sm">
+                                                    <h5 className="text-xs font-black text-gray-400 uppercase tracking-widest">Conferência de Encerramento</h5>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-600 dark:text-gray-300 font-semibold">Valor Real (Informado):</span>
+                                                        <span className="font-black text-lg text-gray-800 dark:text-white">{formatarMoeda(detalhesRelatorio.valorFechamentoReal)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-gray-700">
+                                                        <span className="text-gray-600 dark:text-gray-300 font-bold">Resultado / Diferença:</span>
                                                         {detalhesRelatorio.diferenca === 0 ? (
-                                                            <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-lg text-xs font-bold">Caixa Correto (R$ 0,00)</span>
+                                                            <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-lg text-xs font-black uppercase">Caixa Correto (R$ 0,00)</span>
                                                         ) : detalhesRelatorio.diferenca < 0 ? (
-                                                            <span className="bg-red-100 text-red-800 px-3 py-1 rounded-lg text-xs font-bold">Falta Dinheiro ({formatarMoeda(detalhesRelatorio.diferenca)})</span>
+                                                            <span className="bg-red-100 text-red-800 px-3 py-1 rounded-lg text-xs font-black uppercase">Falta ({formatarMoeda(detalhesRelatorio.diferenca)})</span>
                                                         ) : (
-                                                            <span className="bg-green-100 text-green-800 px-3 py-1 rounded-lg text-xs font-bold">Sobra no Caixa (+{formatarMoeda(detalhesRelatorio.diferenca)})</span>
+                                                            <span className="bg-green-100 text-green-800 px-3 py-1 rounded-lg text-xs font-black uppercase">Sobra (+{formatarMoeda(detalhesRelatorio.diferenca)})</span>
                                                         )}
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* Indicadores Totais e Digitais */}
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 space-y-2 text-sm">
-                                                    <h5 className="text-xs font-black text-gray-400 uppercase tracking-wider">Faturamento Digital</h5>
-                                                    <div className="flex justify-between"><span>📱 PIX:</span><span className="font-bold">{formatarMoeda(detalhesRelatorio.totalPix)}</span></div>
-                                                    <div className="flex justify-between"><span>💳 Crédito:</span><span className="font-bold">{formatarMoeda(detalhesRelatorio.totalCredito)}</span></div>
-                                                    <div className="flex justify-between"><span>💳 Débito:</span><span className="font-bold">{formatarMoeda(detalhesRelatorio.totalDebito)}</span></div>
+                                                    <h5 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Faturamento Digital</h5>
+                                                    <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-300">📱 PIX:</span><span className="font-bold dark:text-white">{formatarMoeda(detalhesRelatorio.totalPix)}</span></div>
+                                                    <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-300">💳 Crédito:</span><span className="font-bold dark:text-white">{formatarMoeda(detalhesRelatorio.totalCredito)}</span></div>
+                                                    <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-300">💳 Débito:</span><span className="font-bold dark:text-white">{formatarMoeda(detalhesRelatorio.totalDebito)}</span></div>
                                                 </div>
-                                                <div className="p-4 rounded-xl bg-gray-900 text-white space-y-2 text-sm shadow flex flex-col justify-center">
-                                                    <div className="flex justify-between text-gray-300"><span>Vendas:</span><span className="font-bold">{detalhesRelatorio.qtdVendas} unid.</span></div>
-                                                    <div className="flex justify-between font-black text-base pt-2 border-t border-gray-800 text-green-400"><span>Bruto Total:</span><span>{formatarMoeda(detalhesRelatorio.faturamentoTotal)}</span></div>
+                                                <div className="p-4 rounded-xl bg-gray-900 text-white space-y-2 text-sm shadow-md flex flex-col justify-center">
+                                                    <div className="flex justify-between text-gray-300"><span>Volume Vendas:</span><span className="font-bold">{detalhesRelatorio.qtdVendas} unid.</span></div>
+                                                    <div className="flex justify-between font-black text-lg pt-3 border-t border-gray-800 text-green-400"><span>Bruto Total:</span><span>{formatarMoeda(detalhesRelatorio.faturamentoTotal)}</span></div>
                                                 </div>
                                             </div>
 
-                                            {/* SEÇÃO NOVA: LISTAGENS DETALHADAS */}
+                                            {/* LISTAGENS DETALHADAS (Mapeadas para mobile em vez de table) */}
                                             <div className="mt-8 pt-6 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
-                                                <h4 className="font-black text-gray-800 dark:text-white text-lg mb-6">Detalhamento de Movimentações</h4>
+                                                <h4 className="font-black text-gray-800 dark:text-white text-base mb-4 uppercase tracking-wider">Detalhamento de Registros</h4>
 
-                                                {/* Entradas / Vendas */}
+                                                {/* Vendas */}
                                                 <div className="mb-6">
-                                                    <h5 className="font-bold text-sm text-blue-600 bg-blue-50 py-1 px-3 rounded-t-lg border border-blue-100 border-b-0">
+                                                    <h5 className="font-bold text-xs text-blue-700 bg-blue-50 py-2 px-3 rounded-t-xl border border-blue-100 border-b-0 uppercase tracking-wider">
                                                         🧾 Entradas (Vendas)
                                                     </h5>
-                                                    <div className="border border-blue-100 rounded-b-lg overflow-hidden bg-white">
+                                                    <div className="border border-blue-100 rounded-b-xl overflow-hidden bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
                                                         {detalhesRelatorio.listaVendas.length > 0 ? (
-                                                            <table className="w-full text-left text-xs">
-                                                                <thead className="bg-gray-50 text-gray-500 border-b">
-                                                                    <tr><th className="p-2">Hora</th><th className="p-2">Venda ID</th><th className="p-2 text-center">Método</th><th className="p-2 text-right">Valor</th></tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {detalhesRelatorio.listaVendas.map((v: any) => (
-                                                                        <tr key={v.id} className="border-b last:border-0 hover:bg-gray-50">
-                                                                            <td className="p-2 font-mono text-gray-500">{formatarDataHora(v.data_venda).split(' ')[1]}</td>
-                                                                            <td className="p-2 font-semibold">#{v.id.split('-')[0]}</td>
-                                                                            <td className="p-2 text-center"><span className="bg-gray-100 px-2 py-0.5 rounded text-[10px] font-bold text-gray-600">{v.metodo_pagamento || 'MISTO'}</span></td>
-                                                                            <td className="p-2 text-right font-bold text-gray-800">{formatarMoeda(v.total)}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
+                                                            detalhesRelatorio.listaVendas.map((v: any) => (
+                                                                <div key={v.id} className="flex justify-between items-center p-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-gray-800 dark:text-gray-200">#{v.id.split('-')[0]} <span className="text-gray-400 text-xs font-normal">({formatarDataHora(v.data_venda).split(' ')[1]})</span></span>
+                                                                        <span className="text-[10px] font-bold text-gray-500 uppercase mt-0.5">{v.metodo_pagamento || 'MISTO'}</span>
+                                                                    </div>
+                                                                    <span className="font-black text-gray-800 dark:text-gray-100">{formatarMoeda(v.total)}</span>
+                                                                </div>
+                                                            ))
                                                         ) : (
                                                             <p className="p-4 text-xs text-gray-400 italic text-center">Nenhuma venda registrada no turno.</p>
                                                         )}
@@ -665,25 +657,20 @@ export default function ContasPagarModulo() {
 
                                                 {/* Suprimentos */}
                                                 <div className="mb-6">
-                                                    <h5 className="font-bold text-sm text-green-600 bg-green-50 py-1 px-3 rounded-t-lg border border-green-100 border-b-0">
-                                                        ➕ Suprimentos (Aportes em Dinheiro)
+                                                    <h5 className="font-bold text-xs text-green-700 bg-green-50 py-2 px-3 rounded-t-xl border border-green-100 border-b-0 uppercase tracking-wider">
+                                                        ➕ Suprimentos (Aportes)
                                                     </h5>
-                                                    <div className="border border-green-100 rounded-b-lg overflow-hidden bg-white">
+                                                    <div className="border border-green-100 rounded-b-xl overflow-hidden bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
                                                         {detalhesRelatorio.listaSuprimentos.length > 0 ? (
-                                                            <table className="w-full text-left text-xs">
-                                                                <thead className="bg-gray-50 text-gray-500 border-b">
-                                                                    <tr><th className="p-2 w-1/4">Hora</th><th className="p-2">Descrição / Motivo</th><th className="p-2 text-right w-1/4">Valor</th></tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {detalhesRelatorio.listaSuprimentos.map((s: any) => (
-                                                                        <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
-                                                                            <td className="p-2 font-mono text-gray-500">{s.data_movimento ? formatarDataHora(s.data_movimento).split(' ')[1] : '-'}</td>
-                                                                            <td className="p-2 font-semibold text-gray-700">{s.descricao}</td>
-                                                                            <td className="p-2 text-right font-bold text-green-600">+{formatarMoeda(s.valor)}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
+                                                            detalhesRelatorio.listaSuprimentos.map((s: any) => (
+                                                                <div key={s.id} className="flex justify-between items-center p-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                                    <div className="flex flex-col pr-4">
+                                                                        <span className="font-semibold text-gray-700 dark:text-gray-300">{s.descricao}</span>
+                                                                        <span className="text-[10px] text-gray-400 font-mono mt-0.5">{s.data_movimento ? formatarDataHora(s.data_movimento).split(' ')[1] : '-'}</span>
+                                                                    </div>
+                                                                    <span className="font-black text-green-600">+{formatarMoeda(s.valor)}</span>
+                                                                </div>
+                                                            ))
                                                         ) : (
                                                             <p className="p-4 text-xs text-gray-400 italic text-center">Nenhum suprimento registrado.</p>
                                                         )}
@@ -692,37 +679,32 @@ export default function ContasPagarModulo() {
 
                                                 {/* Sangrias */}
                                                 <div className="mb-6">
-                                                    <h5 className="font-bold text-sm text-red-600 bg-red-50 py-1 px-3 rounded-t-lg border border-red-100 border-b-0">
-                                                        ➖ Sangrias e Despesas (Saídas de Dinheiro)
+                                                    <h5 className="font-bold text-xs text-red-700 bg-red-50 py-2 px-3 rounded-t-xl border border-red-100 border-b-0 uppercase tracking-wider">
+                                                        ➖ Sangrias e Despesas
                                                     </h5>
-                                                    <div className="border border-red-100 rounded-b-lg overflow-hidden bg-white">
+                                                    <div className="border border-red-100 rounded-b-xl overflow-hidden bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
                                                         {detalhesRelatorio.listaSangrias.length > 0 ? (
-                                                            <table className="w-full text-left text-xs">
-                                                                <thead className="bg-gray-50 text-gray-500 border-b">
-                                                                    <tr><th className="p-2 w-1/4">Hora</th><th className="p-2">Descrição / Motivo</th><th className="p-2 text-right w-1/4">Valor</th></tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {detalhesRelatorio.listaSangrias.map((s: any) => (
-                                                                        <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
-                                                                            <td className="p-2 font-mono text-gray-500">{s.data_movimento ? formatarDataHora(s.data_movimento).split(' ')[1] : '-'}</td>
-                                                                            <td className="p-2 font-semibold text-gray-700">{s.descricao}</td>
-                                                                            <td className="p-2 text-right font-bold text-red-600">-{formatarMoeda(s.valor)}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
+                                                            detalhesRelatorio.listaSangrias.map((s: any) => (
+                                                                <div key={s.id} className="flex justify-between items-center p-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                                    <div className="flex flex-col pr-4">
+                                                                        <span className="font-semibold text-gray-700 dark:text-gray-300">{s.descricao}</span>
+                                                                        <span className="text-[10px] text-gray-400 font-mono mt-0.5">{s.data_movimento ? formatarDataHora(s.data_movimento).split(' ')[1] : '-'}</span>
+                                                                    </div>
+                                                                    <span className="font-black text-red-600">-{formatarMoeda(s.valor)}</span>
+                                                                </div>
+                                                            ))
                                                         ) : (
                                                             <p className="p-4 text-xs text-gray-400 italic text-center">Nenhuma sangria ou despesa registrada.</p>
                                                         )}
                                                     </div>
                                                 </div>
-
                                             </div>
                                         </div>
                                     )
                                 ) : (
-                                    <div className="text-center py-24 text-gray-400 italic text-sm">
-                                        ◀️ Selecione um caixa da lista lateral para auditar as informações completas.
+                                    <div className="text-center py-24 text-gray-400 italic text-sm px-4">
+                                        <span className="text-4xl mb-4 block grayscale opacity-50">📑</span>
+                                        Selecione um caixa da lista para auditar as informações completas.
                                     </div>
                                 )}
                             </div>
@@ -733,24 +715,24 @@ export default function ContasPagarModulo() {
 
             {/* Modais de Movimentação Manual de Caixa */}
             {modalMovimento && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-                        <h3 className="text-xl font-bold text-cafe-dark mb-4 flex items-center gap-2">
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border">
+                        <h3 className="text-xl font-black text-cafe-dark mb-4 flex items-center gap-2">
                             {modalMovimento === 'suprimento' ? '➕ Lançar Suprimento' : '➖ Lançar Sangria'}
                         </h3>
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Valor (R$)</label>
-                                <input type="number" className="w-full p-2 border rounded font-bold outline-none" value={valorMovimento} onChange={(e) => setValorMovimento(Number(e.target.value))} placeholder="0,00" />
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Valor (R$)</label>
+                                <input type="number" className="w-full p-4 border border-gray-300 rounded-xl font-black text-xl text-center outline-none focus:border-cafe-primary text-base" value={valorMovimento} onChange={(e) => setValorMovimento(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0,00" autoFocus />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Motivo / Descrição</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm outline-none" value={motivoMovimento} onChange={(e) => setMotivoMovimento(e.target.value)} placeholder="Ex: Troco inicial extra..." />
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Motivo / Descrição</label>
+                                <input type="text" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-xl outline-none focus:border-cafe-primary text-base md:text-sm" value={motivoMovimento} onChange={(e) => setMotivoMovimento(e.target.value)} placeholder="Ex: Troco inicial extra..." />
                             </div>
                         </div>
                         <div className="flex gap-3 mt-6">
-                            <button onClick={() => { setModalMovimento(null); setValorMovimento(''); setMotivoMovimento(''); }} className="flex-1 bg-gray-100 py-2 rounded font-semibold text-sm">Cancelar</button>
-                            <button onClick={lancarMovimentoCaixa} className={`flex-1 text-white py-2 rounded font-semibold text-sm ${modalMovimento === 'suprimento' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>Confirmar</button>
+                            <button onClick={() => { setModalMovimento(null); setValorMovimento(''); setMotivoMovimento(''); }} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold transition">Cancelar</button>
+                            <button onClick={lancarMovimentoCaixa} className={`flex-1 text-white py-3 rounded-xl font-bold shadow-md transition active:scale-95 ${modalMovimento === 'suprimento' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>Confirmar</button>
                         </div>
                     </div>
                 </div>
@@ -758,25 +740,25 @@ export default function ContasPagarModulo() {
 
             {/* Modal de Pagamento */}
             {contaParaPagar && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-                        <h3 className="text-xl font-bold text-cafe-dark mb-2">Dar Baixa na Conta</h3>
-                        <p className="text-gray-600 mb-4 text-sm">Confirma o pagamento de <strong>{formatarMoeda(contaParaPagar.valor)}</strong> para <strong>{contaParaPagar.descricao}</strong>?</p>
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center">
+                        <div className="text-green-500 text-4xl mb-2">💸</div>
+                        <h3 className="text-xl font-black text-cafe-dark mb-2">Dar Baixa na Conta</h3>
+                        <p className="text-gray-600 mb-6 text-sm">Confirma o pagamento de <strong className="text-lg block my-1 text-gray-800">{formatarMoeda(contaParaPagar.valor)}</strong> para <span className="font-semibold">{contaParaPagar.descricao}</span>?</p>
 
-                        <div className="mb-6">
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Forma de Pagamento</label>
-                            <select className="w-full p-2 border rounded bg-white font-semibold text-sm" value={metodoPagamentoBaixa} onChange={(e) => setMetodoPagamentoBaixa(e.target.value)}>
-                                <option value="PIX">📱 PIX (Desconta do Banco)</option>
-                                <option value="Dinheiro">💵 Dinheiro (Desconta da Gaveta)</option>
-                                <option value="Cartão de Débito">💳 Cartão de Débito (Desconta do Banco)</option>
-                                <option value="Cartão de Crédito">💳 Cartão de Crédito</option>
-                                <option value="Transferência">🏦 Transferência (Desconta do Banco)</option>
+                        <div className="mb-6 text-left">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Forma de Pagamento</label>
+                            <select className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 font-bold text-base md:text-sm outline-none focus:ring-2 focus:ring-green-400" value={metodoPagamentoBaixa} onChange={(e) => setMetodoPagamentoBaixa(e.target.value)}>
+                                <option value="PIX">📱 PIX (Debita Banco)</option>
+                                <option value="Dinheiro">💵 Dinheiro (Da Gaveta)</option>
+                                <option value="Cartão de Débito">💳 Débito (Banco)</option>
+                                <option value="Transferência">🏦 Transferência (Banco)</option>
                             </select>
                         </div>
 
                         <div className="flex gap-3">
-                            <button onClick={() => setContaParaPagar(null)} className="flex-1 bg-gray-100 py-2 rounded font-semibold text-sm">Voltar</button>
-                            <button onClick={confirmarPagamento} className="flex-1 bg-green-600 text-white py-2 rounded font-semibold text-sm hover:bg-green-700">Sim, Pago</button>
+                            <button onClick={() => setContaParaPagar(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold transition">Voltar</button>
+                            <button onClick={confirmarPagamento} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-black shadow-lg transition active:scale-95">Sim, Pagar</button>
                         </div>
                     </div>
                 </div>
@@ -784,49 +766,55 @@ export default function ContasPagarModulo() {
 
             {/* Modal de Exclusão */}
             {contaParaApagar && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"><div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm"><h3 className="text-xl font-bold text-cafe-dark mb-2">Excluir/Estornar Conta</h3><p className="text-gray-600 mb-6 text-sm">Tem certeza que deseja apagar esta conta? (O valor será estornado na gaveta ou banco se já foi paga).</p><div className="flex gap-3"><button onClick={() => setContaParaApagar(null)} className="flex-1 bg-gray-100 py-2 rounded font-semibold">Cancelar</button><button onClick={confirmarExclusao} className="flex-1 bg-red-600 text-white py-2 rounded font-semibold">Sim, Excluir</button></div></div></div>
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center">
+                        <div className="text-red-500 text-5xl mb-3">⚠️</div>
+                        <h3 className="text-xl font-black text-cafe-dark mb-2">Excluir/Estornar Conta</h3>
+                        <p className="text-gray-600 mb-6 text-sm px-2">Tem certeza que deseja apagar esta conta? (O valor será estornado na gaveta ou banco se já foi paga).</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setContaParaApagar(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold transition">Cancelar</button>
+                            <button onClick={confirmarExclusao} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-md transition active:scale-95">Excluir</button>
+                        </div>
+                    </div>
+                </div>
             )}
 
-            {/* CORPO PRINCIPAL DO HEAD */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
-                <h2 className="text-2xl font-bold text-cafe-primary">Contas a Pagar (Financeiro)</h2>
-                <div className="flex gap-2">
-                    <button onClick={abrirHistoricoCaixas} className="bg-white text-gray-700 border border-gray-300 px-3 py-1.5 rounded font-bold text-xs shadow-sm hover:bg-gray-50 transition flex items-center gap-1">📋 Histórico de Caixas</button>
-                    <button onClick={() => setModalMovimento('suprimento')} className="bg-white text-gray-700 border border-gray-300 px-3 py-1.5 rounded font-bold text-xs shadow-sm hover:bg-gray-50 transition flex items-center gap-1">➕ Suprimento</button>
-                    <button onClick={() => setModalMovimento('sangria')} className="bg-white text-gray-700 border border-gray-300 px-3 py-1.5 rounded font-bold text-xs shadow-sm hover:bg-gray-50 transition flex items-center gap-1">➖ Sangria</button>
-                    <button onClick={() => { setNovoSaldoBanco(saldoDigital); setModalAjusteBanco(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded font-bold text-xs shadow-sm hover:bg-blue-700 transition flex items-center gap-1">🏦 Ajustar Banco</button>
+            {/* CABEÇALHO (HEADER) DA PÁGINA */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
+                <div>
+                    <h2 className="text-2xl font-black text-cafe-primary uppercase tracking-wider">Gestão Financeira</h2>
+                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Contas a Pagar & Fluxo de Caixa</p>
+                </div>
+                <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                    <button onClick={abrirHistoricoCaixas} className="flex-1 lg:flex-none justify-center bg-white text-gray-700 border border-gray-300 px-4 py-3 md:py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2 active:scale-95">📋 Histórico</button>
+                    <button onClick={() => setModalMovimento('suprimento')} className="flex-1 lg:flex-none justify-center bg-white text-gray-700 border border-gray-300 px-4 py-3 md:py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2 active:scale-95">➕ Supri.</button>
+                    <button onClick={() => setModalMovimento('sangria')} className="flex-1 lg:flex-none justify-center bg-white text-gray-700 border border-gray-300 px-4 py-3 md:py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2 active:scale-95">➖ Sangria</button>
+                    <button onClick={() => { setNovoSaldoBanco(saldoDigital); setModalAjusteBanco(true); }} className="w-full lg:w-auto justify-center bg-blue-600 text-white px-4 py-3 md:py-2 rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition flex items-center gap-2 active:scale-95">🏦 Ajustar Banco</button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
-                <div className="bg-red-50 border border-red-200 p-4 rounded-lg shadow-sm flex flex-col justify-center">
-                    <h4 className="text-red-800 font-bold text-sm">Total Pendente</h4>
-                    <p className="text-[10px] text-red-600 mb-1">Contas não pagas (Todas as datas)</p>
-                    <span className="text-xl font-black text-red-600">{formatarMoeda(accountsData.totalPendente)}</span>
+            {/* CARDS DE INDICADORES (KPIs) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
+                <div className="bg-red-50 border border-red-200 p-4 rounded-2xl shadow-sm flex flex-col justify-center text-center sm:text-left">
+                    <h4 className="text-red-800 font-black text-xs uppercase tracking-wider">Total Pendente</h4>
+                    <span className="text-2xl md:text-3xl font-black text-red-600 mt-1">{formatarMoeda(accountsData.totalPendente)}</span>
                 </div>
 
-                <div className={`p-4 rounded-lg shadow-sm flex flex-col justify-center border ${caixaAtivo ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                    <h4 className={`font-bold text-sm ${caixaAtivo ? 'text-green-800' : 'text-gray-600'}`}>Dinheiro na Gaveta</h4>
-                    <p className={`text-[10px] mb-1 ${caixaAtivo ? 'text-green-600' : 'text-gray-400'}`}>Apenas físico no caixa atual</p>
-                    <span className={`text-xl font-black ${caixaAtivo ? 'text-green-600' : 'text-gray-400'}`}>
+                <div className={`p-4 rounded-2xl shadow-sm flex flex-col justify-center border text-center sm:text-left ${caixaAtivo ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                    <h4 className={`font-black text-xs uppercase tracking-wider ${caixaAtivo ? 'text-green-800' : 'text-gray-500'}`}>Em Gaveta (Físico)</h4>
+                    <span className={`text-2xl md:text-3xl font-black mt-1 ${caixaAtivo ? 'text-green-600' : 'text-gray-400'}`}>
                         {caixaAtivo ? formatarMoeda(dinheiroEmCaixa) : '---'}
                     </span>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg shadow-sm flex flex-col justify-center relative group">
-                    <div className="flex justify-between">
-                        <div>
-                            <h4 className="text-blue-900 font-bold text-sm">Saldo Digital (Banco)</h4>
-                            <p className="text-[10px] text-blue-600 mb-1">Conta da Empresa (PIX/Débito)</p>
-                        </div>
-                    </div>
-                    <span className="text-xl font-black text-blue-700">{formatarMoeda(saldoDigital)}</span>
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl shadow-sm flex flex-col justify-center text-center sm:text-left">
+                    <h4 className="text-blue-900 font-black text-xs uppercase tracking-wider">Saldo Digital</h4>
+                    <span className="text-2xl md:text-3xl font-black text-blue-700 mt-1">{formatarMoeda(saldoDigital)}</span>
                 </div>
 
-                <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg shadow-sm flex flex-col justify-center">
-                    <h4 className="text-gray-800 font-bold text-sm">Balanço Líquido do Turno</h4>
-                    <p className="text-[10px] text-gray-500 mb-1">Vendas (todas) - Despesas pagas hoje</p>
-                    <span className="text-xl font-black text-gray-700">
+                <div className="bg-gray-50 border border-gray-200 p-4 rounded-2xl shadow-sm flex flex-col justify-center text-center sm:text-left">
+                    <h4 className="text-gray-800 font-black text-xs uppercase tracking-wider">Líquido do Turno</h4>
+                    <span className="text-2xl md:text-3xl font-black text-gray-700 mt-1">
                         {caixaAtivo ? formatarMoeda(accountsData.balancoGeralTurno) : '---'}
                     </span>
                 </div>
@@ -837,61 +825,79 @@ export default function ContasPagarModulo() {
                 <div className="lg:col-span-1 flex flex-col gap-6">
 
                     {/* FORMULÁRIO MANUAL */}
-                    <div className="bg-cafe-bg p-4 rounded-lg border border-gray-200 shadow-sm">
-                        <h3 className="font-semibold text-cafe-dark mb-3 border-b pb-1">Lançamento de Despesa</h3>
-                        <div className="mb-3"><label className="block text-sm font-semibold mb-1">Descrição</label><input type="text" className="w-full p-2 border rounded outline-none text-sm" value={descricao} onChange={(e) => setDescricao(e.target.value)} /></div>
-                        <div className="mb-3">
-                            <label className="block text-sm font-semibold mb-1">Fornecedor (Opcional)</label>
-                            <select className="w-full p-2 border rounded bg-white outline-none text-sm" value={fornecedorId} onChange={(e) => setFornecedorId(e.target.value)}>
-                                <option value="">Sem fornecedor específico</option>
-                                {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-                            </select>
-                        </div>
+                    <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <h3 className="font-black text-cafe-dark text-sm uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Lançamento de Despesa</h3>
 
-                        <div className="flex gap-2 mb-3">
-                            <div className="flex-1"><label className="block text-sm font-semibold mb-1">Valor (R$)</label><input type="number" className="w-full p-2 border rounded outline-none text-sm" value={valor} onChange={(e) => setValor(Number(e.target.value))} /></div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                                <input type="text" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-gray-50" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex: Conta de Luz" />
+                            </div>
 
-                            {!isRecorrente ? (
-                                <div className="flex-1 animate-fade-in"><label className="block text-sm font-semibold mb-1">Vencimento</label><input type="date" className="w-full p-2 border rounded outline-none text-xs h-[38px]" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} /></div>
-                            ) : (
-                                <div className="flex-1 animate-fade-in"><label className="block text-sm font-semibold mb-1">Dia Venc.</label><input type="number" min="1" max="31" placeholder="Ex: 10" className="w-full p-2 border rounded outline-none font-bold text-center text-sm" value={diaVencimentoRecorrente} onChange={(e) => setDiaVencimentoRecorrente(Number(e.target.value))} /></div>
-                            )}
-                        </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fornecedor (Opcional)</label>
+                                <select className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm" value={fornecedorId} onChange={(e) => setFornecedorId(e.target.value)}>
+                                    <option value="">Sem fornecedor...</option>
+                                    {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                                </select>
+                            </div>
 
-                        <div className="bg-white p-3 rounded-lg border space-y-3 shadow-inner">
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input type="checkbox" className="w-4 h-4 text-cafe-primary rounded border-gray-300" checked={isRecorrente} onChange={(e) => { setIsRecorrente(e.target.checked); setDataVencimento(''); }} />
-                                <span className="text-sm font-bold text-gray-700">Lançar conta fixa recorrente</span>
-                            </label>
-                            {isRecorrente && (
-                                <div className="flex items-center gap-2 animate-fade-in">
-                                    <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Repetir pelos próximos:</span>
-                                    <input type="number" min="2" max="24" className="w-16 p-1 border rounded text-center font-bold outline-none text-sm" value={numMeses} onChange={(e) => setNumMeses(Number(e.target.value))} />
-                                    <span className="text-xs font-bold text-gray-600">meses</span>
+                            <div className="flex gap-3">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor (R$)</label>
+                                    <input type="number" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm font-bold bg-gray-50" value={valor} onChange={(e) => setValor(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0.00" />
                                 </div>
-                            )}
-                        </div>
 
-                        <button onClick={lancarContaManual} className="w-full bg-cafe-primary text-white font-bold py-2.5 rounded shadow mt-3 hover:bg-cafe-dark transition text-sm">Lançar Conta</button>
+                                {!isRecorrente ? (
+                                    <div className="flex-1 animate-fade-in">
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vencimento</label>
+                                        <input type="date" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-gray-50" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} />
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 animate-fade-in">
+                                        <label className="block text-xs font-bold text-cafe-primary uppercase mb-1">Dia Venc.</label>
+                                        <input type="number" min="1" max="31" placeholder="Ex: 10" className="w-full p-3 md:p-2.5 border border-cafe-secondary rounded-lg outline-none focus:ring-2 focus:ring-cafe-primary font-bold text-center text-base md:text-sm bg-cafe-bg/20" value={diaVencimentoRecorrente} onChange={(e) => setDiaVencimentoRecorrente(e.target.value === '' ? '' : Number(e.target.value))} />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-inner">
+                                <label className="flex items-center gap-3 cursor-pointer select-none">
+                                    <input type="checkbox" className="w-5 h-5 text-cafe-primary rounded border-gray-300" checked={isRecorrente} onChange={(e) => { setIsRecorrente(e.target.checked); setDataVencimento(''); }} />
+                                    <span className="text-sm font-bold text-gray-700">Lançamento Recorrente</span>
+                                </label>
+                                {isRecorrente && (
+                                    <div className="flex items-center gap-3 animate-fade-in mt-3 pt-3 border-t border-gray-200">
+                                        <span className="text-xs font-bold text-gray-500 uppercase">Repetir por:</span>
+                                        <input type="number" min="2" max="24" className="w-20 p-2.5 md:p-2 border border-cafe-secondary rounded-lg text-center font-black outline-none focus:ring-2 focus:ring-cafe-primary text-base md:text-sm" value={numMeses} onChange={(e) => setNumMeses(e.target.value === '' ? '' : Number(e.target.value))} />
+                                        <span className="text-xs font-bold text-gray-600 uppercase">meses</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button onClick={lancarContaManual} className="w-full bg-cafe-primary text-white font-black uppercase tracking-wider py-4 md:py-3.5 rounded-xl shadow-md mt-2 hover:bg-cafe-dark transition active:scale-95 text-sm">
+                                Lançar Conta
+                            </button>
+                        </div>
                     </div>
 
                     {/* RECEBIMENTOS DO TURNO */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                        <h3 className="font-bold text-gray-700 mb-4 border-b pb-2 text-sm uppercase tracking-wide">Recebimentos (Turno)</h3>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">📱 PIX</span><span className="font-bold text-gray-800">{formatarMoeda(totaisVendas.pix)}</span></div>
-                            <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💵 Dinheiro</span><span className="font-bold text-gray-800">{formatarMoeda(totaisVendas.din)}</span></div>
-                            <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💳 Cartão de Crédito</span><span className="font-bold text-gray-800">{formatarMoeda(totaisVendas.cred)}</span></div>
-                            <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💳 Cartão de Débito</span><span className="font-bold text-gray-800">{formatarMoeda(totaisVendas.deb)}</span></div>
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                        <h3 className="font-black text-gray-800 mb-4 border-b border-gray-100 pb-2 text-sm uppercase tracking-wider">Resumo de Entradas (Turno)</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg"><span className="text-sm text-gray-600 font-bold">📱 PIX</span><span className="font-black text-gray-800">{formatarMoeda(totaisVendas.pix)}</span></div>
+                            <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg"><span className="text-sm text-gray-600 font-bold">💵 Dinheiro</span><span className="font-black text-green-700">{formatarMoeda(totaisVendas.din)}</span></div>
+                            <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg"><span className="text-sm text-gray-600 font-bold">💳 C. Crédito</span><span className="font-black text-gray-800">{formatarMoeda(totaisVendas.cred)}</span></div>
+                            <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg"><span className="text-sm text-gray-600 font-bold">💳 C. Débito</span><span className="font-black text-gray-800">{formatarMoeda(totaisVendas.deb)}</span></div>
 
-                            <div className="pt-3 mt-3 border-t border-gray-100 space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-700 font-bold">💰 Total Recebido</span>
-                                    <span className="font-black text-green-600">{formatarMoeda(totaisVendas.total)}</span>
+                            <div className="pt-3 mt-3 border-t-2 border-dashed border-gray-200 space-y-2">
+                                <div className="flex justify-between items-center bg-green-50 p-3 rounded-xl border border-green-100">
+                                    <span className="text-xs text-green-800 font-black uppercase tracking-wider">Bruto Total</span>
+                                    <span className="font-black text-lg text-green-600">{formatarMoeda(totaisVendas.total)}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-700 font-bold">📉 Total Gasto (Despesas)</span>
-                                    <span className="font-black text-red-500">{formatarMoeda(accountsData.totalPagasHoje)}</span>
+                                <div className="flex justify-between items-center bg-red-50 p-3 rounded-xl border border-red-100">
+                                    <span className="text-xs text-red-800 font-black uppercase tracking-wider">Despesas Paga</span>
+                                    <span className="font-black text-lg text-red-500">-{formatarMoeda(accountsData.totalPagasHoje)}</span>
                                 </div>
                             </div>
                         </div>
@@ -902,52 +908,104 @@ export default function ContasPagarModulo() {
                 <div className="lg:col-span-2 flex flex-col gap-6">
 
                     {/* Contas Pendentes */}
-                    <div className="flex flex-col">
-                        <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Contas Pendentes</h3>
-                        <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[250px]">
-                            <table className="w-full text-left border-collapse min-w-max text-sm relative">
-                                <thead className="bg-cafe-bg border-b sticky top-0 z-10">
-                                    <tr><th className="p-3 font-semibold text-cafe-primary">Vencimento</th><th className="p-3 font-semibold text-cafe-primary">Descrição</th><th className="p-3 font-semibold text-cafe-primary text-right">Valor</th><th className="p-3 font-semibold text-center text-cafe-primary">Ações</th></tr>
+                    <div className="flex flex-col bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden h-fit">
+                        <div className="p-4 border-b border-gray-100 bg-red-50/30">
+                            <h3 className="font-black text-red-700 text-sm uppercase tracking-wider">Contas Pendentes</h3>
+                        </div>
+
+                        {/* VIEW MOBILE: Cards Pendentes */}
+                        <div className="md:hidden space-y-3 p-3 max-h-[50vh] overflow-y-auto bg-gray-50/50">
+                            {accountsData.contasPendentes.map(conta => (
+                                <div key={conta.id} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col gap-3 relative">
+                                    <button onClick={() => setContaParaApagar(conta)} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 bg-gray-50 rounded-lg font-black transition">✕</button>
+                                    <div className="pr-8">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50 px-2 py-0.5 rounded-md inline-block mb-1.5">{formatarData(conta.data_vencimento)}</span>
+                                        <h4 className="font-bold text-gray-800 text-base leading-tight">{conta.descricao}</h4>
+                                        {conta.fornecedores?.nome && <span className="text-xs font-semibold text-gray-500 mt-1 block">{conta.fornecedores.nome}</span>}
+                                    </div>
+                                    <div className="flex justify-between items-end pt-2 border-t border-gray-100 mt-1">
+                                        <span className="font-black text-xl text-cafe-dark">{formatarMoeda(conta.valor)}</span>
+                                        <button onClick={() => setContaParaPagar(conta)} className="bg-green-50 text-green-700 font-bold px-4 py-2.5 rounded-lg border border-green-200 shadow-sm active:scale-95 transition text-sm">Dar Baixa</button>
+                                    </div>
+                                </div>
+                            ))}
+                            {accountsData.contasPendentes.length === 0 && <p className="text-center text-gray-400 italic text-sm py-8">Nenhuma conta pendente.</p>}
+                        </div>
+
+                        {/* VIEW DESKTOP: Tabela Pendentes */}
+                        <div className="hidden md:block overflow-auto max-h-[350px] custom-scrollbar">
+                            <table className="w-full text-left border-collapse text-sm">
+                                <thead className="bg-gray-50 border-b sticky top-0 z-10 text-xs text-gray-500 uppercase tracking-wider">
+                                    <tr><th className="p-4 font-bold">Vencimento</th><th className="p-4 font-bold">Descrição</th><th className="p-4 font-bold text-right">Valor</th><th className="p-4 font-bold text-center">Ações</th></tr>
                                 </thead>
                                 <tbody>
                                     {accountsData.contasPendentes.map(conta => (
-                                        <tr key={conta.id} className="border-b hover:bg-gray-50">
-                                            <td className="p-3 font-bold text-red-600">{formatarData(conta.data_vencimento)}</td>
-                                            <td className="p-3"><span className="font-semibold text-cafe-dark block">{conta.descricao}</span>{conta.fornecedores?.nome && <span className="text-xs text-gray-500">{conta.fornecedores.nome}</span>}</td>
-                                            <td className="p-3 font-bold text-cafe-dark text-right">{formatarMoeda(conta.valor)}</td>
-                                            <td className="p-3 text-center space-x-2">
-                                                <button onClick={() => setContaParaPagar(conta)} className="text-green-600 bg-green-50 px-2 py-1 rounded hover:bg-green-100 font-bold text-xs border border-green-200 shadow-sm">Dar Baixa</button>
-                                                <button onClick={() => setContaParaApagar(conta)} className="text-red-400 font-black hover:text-red-600 text-base px-1">×</button>
+                                        <tr key={conta.id} className="border-b hover:bg-gray-50 transition">
+                                            <td className="p-4 font-black text-red-500">{formatarData(conta.data_vencimento)}</td>
+                                            <td className="p-4"><span className="font-bold text-gray-800 block">{conta.descricao}</span>{conta.fornecedores?.nome && <span className="text-xs text-gray-500 font-semibold">{conta.fornecedores.nome}</span>}</td>
+                                            <td className="p-4 font-black text-gray-800 text-right text-base">{formatarMoeda(conta.valor)}</td>
+                                            <td className="p-4 text-center space-x-2">
+                                                <button onClick={() => setContaParaPagar(conta)} className="text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100 font-bold text-xs border border-green-200 transition shadow-sm">Dar Baixa</button>
+                                                <button onClick={() => setContaParaApagar(conta)} className="text-gray-400 font-black hover:text-red-500 text-base px-2 py-1 bg-gray-50 rounded-lg transition">✕</button>
                                             </td>
                                         </tr>
                                     ))}
-                                    {accountsData.contasPendentes.length === 0 && (<tr><td colSpan={4} className="p-6 text-center text-gray-500 italic">Nenhuma conta pendente.</td></tr>)}
+                                    {accountsData.contasPendentes.length === 0 && (<tr><td colSpan={4} className="p-8 text-center text-gray-400 italic">Nenhuma conta pendente.</td></tr>)}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
                     {/* Histórico de Pagamentos */}
-                    <div className="flex flex-col">
-                        <h3 className="font-semibold text-cafe-dark text-lg border-b pb-2 mb-4">Histórico de Pagamentos</h3>
-                        <div className="bg-white rounded-lg border shadow-sm overflow-auto h-[250px]">
-                            <table className="w-full text-left border-collapse min-w-max text-sm relative">
-                                <thead className="bg-gray-100 border-b sticky top-0 z-10">
-                                    <tr><th className="p-3 font-semibold text-gray-600">Data e Forma</th><th className="p-3 font-semibold text-gray-600">Descrição</th><th className="p-3 font-semibold text-gray-600 text-right">Valor</th><th className="p-3 font-semibold text-center text-gray-600">Estornar</th></tr>
+                    <div className="flex flex-col bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden h-fit">
+                        <div className="p-4 border-b border-gray-100 bg-green-50/30">
+                            <h3 className="font-black text-green-700 text-sm uppercase tracking-wider">Histórico de Pagamentos</h3>
+                        </div>
+
+                        {/* VIEW MOBILE: Cards Pagos */}
+                        <div className="md:hidden space-y-3 p-3 max-h-[40vh] overflow-y-auto bg-gray-50/50">
+                            {accountsData.contasPagas.map(conta => (
+                                <div key={conta.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-2 opacity-90">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <span className="text-green-600 font-black text-xs block mb-1">{formatarData(conta.data_pagamento || '')}</span>
+                                            <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">{conta.metodo_pagamento || 'N/A'}</span>
+                                        </div>
+                                        <span className="font-black text-gray-700 text-lg">{formatarMoeda(conta.valor)}</span>
+                                    </div>
+                                    <div className="mt-1">
+                                        <h4 className="font-bold text-gray-800 text-sm">{conta.descricao}</h4>
+                                        {conta.fornecedores?.nome && <span className="text-xs font-semibold text-gray-500 block">{conta.fornecedores.nome}</span>}
+                                    </div>
+                                    <div className="pt-2 border-t border-gray-100 mt-1 flex justify-end">
+                                        <button onClick={() => setContaParaApagar(conta)} className="text-red-500 font-bold text-xs bg-red-50 px-3 py-2 rounded-lg border border-red-100 active:scale-95 transition uppercase tracking-wider">Estornar</button>
+                                    </div>
+                                </div>
+                            ))}
+                            {accountsData.contasPagas.length === 0 && <p className="text-center text-gray-400 italic text-sm py-8">Nenhum pagamento efetuado.</p>}
+                        </div>
+
+                        {/* VIEW DESKTOP: Tabela Pagos */}
+                        <div className="hidden md:block overflow-auto max-h-[300px] custom-scrollbar">
+                            <table className="w-full text-left border-collapse text-sm">
+                                <thead className="bg-gray-50 border-b sticky top-0 z-10 text-xs text-gray-500 uppercase tracking-wider">
+                                    <tr><th className="p-4 font-bold">Data/Forma</th><th className="p-4 font-bold">Descrição</th><th className="p-4 font-bold text-right">Valor</th><th className="p-4 font-bold text-center">Ação</th></tr>
                                 </thead>
                                 <tbody>
                                     {accountsData.contasPagas.map(conta => (
-                                        <tr key={conta.id} className="border-b hover:bg-gray-50 opacity-90">
-                                            <td className="p-3 text-gray-700">
-                                                <div className="font-semibold text-green-700">{conta.data_pagamento ? formatarData(conta.data_pagamento) : '-'}</div>
-                                                {conta.metodo_pagamento && <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded mt-1 inline-block">{conta.metodo_pagamento.toUpperCase()}</span>}
+                                        <tr key={conta.id} className="border-b hover:bg-gray-50 transition opacity-90">
+                                            <td className="p-4 text-gray-700">
+                                                <div className="font-black text-green-600">{conta.data_pagamento ? formatarData(conta.data_pagamento) : '-'}</div>
+                                                {conta.metodo_pagamento && <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-md mt-1 inline-block uppercase tracking-wider">{conta.metodo_pagamento}</span>}
                                             </td>
-                                            <td className="p-3 text-gray-700">{conta.descricao} {conta.fornecedores?.nome && <span className="text-xs text-gray-400 block">Fornecedor: {conta.fornecedores.nome}</span>}</td>
-                                            <td className="p-3 font-semibold text-gray-600 text-right">{formatarMoeda(conta.valor)}</td>
-                                            <td className="p-3 text-center"><button onClick={() => setContaParaApagar(conta)} className="text-gray-400 hover:text-red-500 font-black text-base px-2 transition">×</button></td>
+                                            <td className="p-4 text-gray-800 font-bold">{conta.descricao} {conta.fornecedores?.nome && <span className="text-xs text-gray-500 font-semibold block">Fornec: {conta.fornecedores.nome}</span>}</td>
+                                            <td className="p-4 font-black text-gray-700 text-right text-base">{formatarMoeda(conta.valor)}</td>
+                                            <td className="p-4 text-center">
+                                                <button onClick={() => setContaParaApagar(conta)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase tracking-wider bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition">Estornar</button>
+                                            </td>
                                         </tr>
                                     ))}
-                                    {accountsData.contasPagas.length === 0 && (<tr><td colSpan={4} className="p-4 text-center text-gray-400 italic">Nenhum pagamento efetuado.</td></tr>)}
+                                    {accountsData.contasPagas.length === 0 && (<tr><td colSpan={4} className="p-8 text-center text-gray-400 italic">Nenhum pagamento efetuado.</td></tr>)}
                                 </tbody>
                             </table>
                         </div>

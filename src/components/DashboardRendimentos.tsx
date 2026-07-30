@@ -229,35 +229,37 @@ export default function DashboardRendimentos() {
     const pathArea = pts.length > 0 ? `${pathLinha} L ${pts[pts.length - 1].x},${padYBot} L ${pts[0].x},${padYBot} Z` : '';
 
     return (
-        <div className="max-w-6xl mx-auto p-6 my-4 space-y-6 relative">
+        <div className="max-w-7xl mx-auto p-4 md:p-6 my-4 space-y-6 relative">
 
-            {/* Cabeçalho */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 z-30 relative">
-                <div>
-                    <h2 className="text-2xl font-black text-cafe-dark tracking-tight">Painel de Rendimentos</h2>
-                    <p className="text-sm text-gray-400 font-medium mt-0.5">Métricas de faturação, margem e performance do salão</p>
+            {/* Cabeçalho e Filtros */}
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 xl:gap-6 z-30 relative">
+                <div className="w-full xl:w-auto text-center xl:text-left">
+                    <h2 className="text-xl md:text-2xl font-black text-cafe-dark tracking-tight uppercase">Painel de Rendimentos</h2>
+                    <p className="text-xs md:text-sm text-gray-500 font-medium mt-0.5">Métricas de faturação, margem e performance do negócio</p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-                    <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner h-fit">
-                        <button onClick={() => definirPeriodoFast('hoje')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${dataInicio === hojeStr && dataFim === hojeStr ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Hoje</button>
-                        <button onClick={() => definirPeriodoFast('7dias')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${dataInicio === new Date(new Date().setDate(hojeDate.getDate() - 7)).toISOString().split('T')[0] ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>7 Dias</button>
-                        <button onClick={() => definirPeriodoFast('mes')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${dataInicio === primeiroDiaDoMesStr && dataFim === hojeStr ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Este Mês</button>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+                    {/* Botões Rápidos */}
+                    <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner w-full sm:w-auto justify-between">
+                        <button onClick={() => definirPeriodoFast('hoje')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === hojeStr && dataFim === hojeStr ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Hoje</button>
+                        <button onClick={() => definirPeriodoFast('7dias')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === new Date(new Date().setDate(hojeDate.getDate() - 7)).toISOString().split('T')[0] ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>7 Dias</button>
+                        <button onClick={() => definirPeriodoFast('mes')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === primeiroDiaDoMesStr && dataFim === hojeStr ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Este Mês</button>
                     </div>
 
-                    <div className="flex items-center bg-white rounded-xl border border-gray-200 shadow-sm relative">
-                        <div className="relative p-2 px-4 flex flex-col cursor-pointer select-none" onClick={() => { setPopoverInicioAberto(!popoverInicioAberto); setPopoverFimAberto(false); }}>
-                            <span className="text-[9px] font-bold text-gray-400 uppercase">Início</span>
-                            <span className="font-bold text-sm text-gray-700 mt-0.5">{formatarDataExibicao(dataInicio)}</span>
+                    {/* Seletores Customizados */}
+                    <div className="flex items-center bg-white rounded-xl border border-gray-200 shadow-sm relative w-full sm:w-auto">
+                        <div className="relative p-2 px-4 flex flex-1 sm:flex-none flex-col cursor-pointer select-none border-r border-gray-100" onClick={() => { setPopoverInicioAberto(!popoverInicioAberto); setPopoverFimAberto(false); }}>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center sm:text-left">Início</span>
+                            <span className="font-black text-sm md:text-sm text-cafe-dark mt-0.5 text-center sm:text-left">{formatarDataExibicao(dataInicio)}</span>
                             {popoverInicioAberto && (
-                                <div className="absolute top-14 left-0 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 z-50" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesInicioView === 0) { setMesInicioView(11); setAnoInicioView(anoInicioView - 1); } else { setMesInicioView(mesInicioView - 1); } }}>&lt;</button>
-                                        <span className="font-bold text-xs text-gray-700 uppercase tracking-wide">{MESES[mesInicioView]} {anoInicioView}</span>
-                                        <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesInicioView === 11) { setMesInicioView(0); setAnoInicioView(anoInicioView + 1); } else { setMesInicioView(mesInicioView + 1); } }}>&gt;</button>
+                                <div className="absolute top-14 left-0 sm:left-auto sm:-left-4 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 w-[280px] z-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesInicioView === 0) { setMesInicioView(11); setAnoInicioView(anoInicioView - 1); } else { setMesInicioView(mesInicioView - 1); } }}>&lt;</button>
+                                        <span className="font-bold text-sm text-gray-800 uppercase tracking-wide">{MESES[mesInicioView]} {anoInicioView}</span>
+                                        <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesInicioView === 11) { setMesInicioView(0); setAnoInicioView(anoInicioView + 1); } else { setMesInicioView(mesInicioView + 1); } }}>&gt;</button>
                                     </div>
-                                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-1">
-                                        {DIAS_SEMANA.map(d => <div key={d}>{d}</div>)}
+                                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-2">
+                                        {DIAS_SEMANA.map((d, i) => <div key={`dw-${i}`}>{d}</div>)}
                                     </div>
                                     <div className="grid grid-cols-7 gap-1 text-center">
                                         {gerarDiasMes(anoInicioView, mesInicioView).map((dia, idx) => {
@@ -265,7 +267,7 @@ export default function DashboardRendimentos() {
                                             const dataFormatada = `${anoInicioView}-${String(mesInicioView + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
                                             const ativo = dataInicio === dataFormatada;
                                             return (
-                                                <button key={dia} onClick={() => { setDataInicio(dataFormatada); setPopoverInicioAberto(false); }} className={`p-1 text-xs rounded-md font-semibold transition ${ativo ? 'bg-cafe-primary text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>{dia}</button>
+                                                <button key={dia} onClick={() => { setDataInicio(dataFormatada); setPopoverInicioAberto(false); }} className={`p-2 text-sm rounded-lg font-bold transition active:scale-95 ${ativo ? 'bg-cafe-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}>{dia}</button>
                                             );
                                         })}
                                     </div>
@@ -273,154 +275,153 @@ export default function DashboardRendimentos() {
                             )}
                         </div>
 
-                        <div className="w-[1px] h-8 bg-gray-200 mx-1"></div>
-
-                        <div className="relative p-2 px-4 flex flex-col cursor-pointer select-none" onClick={() => { setPopoverFimAberto(!popoverFimAberto); setPopoverInicioAberto(false); }}>
-                            <span className="text-[9px] font-bold text-gray-400 uppercase">Fim</span>
-                            <span className="font-bold text-sm text-gray-700 mt-0.5">{formatarDataExibicao(dataFim)}</span>
+                        <div className="relative p-2 px-4 flex flex-1 sm:flex-none flex-col cursor-pointer select-none" onClick={() => { setPopoverFimAberto(!popoverFimAberto); setPopoverInicioAberto(false); }}>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center sm:text-left">Fim</span>
+                            <span className="font-black text-sm md:text-sm text-cafe-dark mt-0.5 text-center sm:text-left">{formatarDataExibicao(dataFim)}</span>
                             {popoverFimAberto && (
-                                <div className="absolute top-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 z-50" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesFimView === 0) { setMesFimView(11); setAnoFimView(anoFimView - 1); } else { setMesFimView(mesFimView - 1); } }}>&lt;</button>
-                                        <span className="font-bold text-xs text-gray-700 uppercase tracking-wide">{MESES[mesFimView]} {anoFimView}</span>
-                                        <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesFimView === 11) { setMesFimView(0); setAnoFimView(anoFimView + 1); } else { setMesFimView(mesFimView + 1); } }}>&gt;</button>
+                                <div className="absolute top-14 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 w-[280px] z-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesFimView === 0) { setMesFimView(11); setAnoFimView(anoFimView - 1); } else { setMesFimView(mesFimView - 1); } }}>&lt;</button>
+                                        <span className="font-bold text-sm text-gray-800 uppercase tracking-wide">{MESES[mesFimView]} {anoFimView}</span>
+                                        <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesFimView === 11) { setMesFimView(0); setAnoFimView(anoFimView + 1); } else { setMesFimView(mesFimView + 1); } }}>&gt;</button>
                                     </div>
-                                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-1">
-                                        {DIAS_SEMANA.map(d => <div key={d}>{d}</div>)}
+                                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-2">
+                                        {DIAS_SEMANA.map((d, i) => <div key={`dw-end-${i}`}>{d}</div>)}
                                     </div>
                                     <div className="grid grid-cols-7 gap-1 text-center">
                                         {gerarDiasMes(anoFimView, mesFimView).map((dia, idx) => {
-                                            if (!dia) return <div key={`empty-${idx}`}></div>;
+                                            if (!dia) return <div key={`empty-end-${idx}`}></div>;
                                             const dataFormatada = `${anoFimView}-${String(mesFimView + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
                                             const ativo = dataFim === dataFormatada;
                                             return (
-                                                <button key={dia} onClick={() => { setDataFim(dataFormatada); setPopoverFimAberto(false); }} className={`p-1 text-xs rounded-md font-semibold transition ${ativo ? 'bg-cafe-primary text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>{dia}</button>
+                                                <button key={dia} onClick={() => { setDataFim(dataFormatada); setPopoverFimAberto(false); }} className={`p-2 text-sm rounded-lg font-bold transition active:scale-95 ${ativo ? 'bg-cafe-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}>{dia}</button>
                                             );
                                         })}
                                     </div>
                                 </div>
                             )}
                         </div>
-
                     </div>
                 </div>
             </div>
 
             {carregando ? (
-                <div className="text-center py-20 font-bold text-cafe-primary animate-pulse text-lg">A processar relatórios financeiros...</div>
+                <div className="text-center py-20 font-black text-gray-400 animate-pulse text-lg tracking-widest uppercase">
+                    A processar dados financeiros...
+                </div>
             ) : (
                 <>
-                    {/* CARDS DOS KPIS */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 z-10 relative">
-                        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Faturamento Total</span>
-                            <span className="text-2xl font-black text-cafe-dark mt-2">{formatarMoeda(metricas.faturamentoTotal)}</span>
-                            <span className="text-[10px] text-green-600 font-bold mt-1">● Total bruto recebido</span>
+                    {/* CARDS DOS KPIS PRINCIPAIS */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 z-10 relative">
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                            <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest leading-tight">Faturamento Bruto</span>
+                            <span className="text-2xl md:text-3xl font-black text-cafe-dark mt-2 mb-1 truncate">{formatarMoeda(metricas.faturamentoTotal)}</span>
+                            <span className="text-[10px] text-green-600 font-bold hidden sm:block">● Entradas totais</span>
                         </div>
 
-                        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between border-l-4 border-l-green-500">
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Lucro Estimado</span>
-                            <span className="text-2xl font-black text-green-700 mt-2">{formatarMoeda(metricas.lucroTotal)}</span>
-                            <span className="text-[10px] text-gray-500 font-bold mt-1">Faturamento (-) custo</span>
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between border-l-4 border-l-green-500">
+                            <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest leading-tight">Lucro Bruto</span>
+                            <span className="text-2xl md:text-3xl font-black text-green-600 mt-2 mb-1 truncate">{formatarMoeda(metricas.lucroTotal)}</span>
+                            <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Receitas (-) Custos Fichas</span>
                         </div>
 
-                        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ticket Médio</span>
-                            <span className="text-2xl font-black text-blue-600 mt-2">{formatarMoeda(metricas.ticketMedio)}</span>
-                            <span className="text-[10px] text-gray-500 font-bold mt-1">Média gasta por pedido</span>
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between border-l-4 border-l-blue-500">
+                            <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest leading-tight">Ticket Médio</span>
+                            <span className="text-2xl md:text-3xl font-black text-blue-600 mt-2 mb-1 truncate">{formatarMoeda(metricas.ticketMedio)}</span>
+                            <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Média gasta por mesa/pedido</span>
                         </div>
 
-                        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Volume de Vendas</span>
-                            <span className="text-2xl font-black text-purple-600 mt-2">{metricas.totalVendasCount}</span>
-                            <span className="text-[10px] text-gray-500 font-bold mt-1">Pedidos finalizados no período</span>
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between border-l-4 border-l-purple-500">
+                            <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest leading-tight">Volume Vendas</span>
+                            <span className="text-2xl md:text-3xl font-black text-purple-600 mt-2 mb-1 truncate">{metricas.totalVendasCount} <span className="text-sm font-bold text-gray-400">pedidos</span></span>
+                            <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Pedidos finalizados no período</span>
                         </div>
                     </div>
 
                     {/* GRÁFICO DE LINHAS COM FUNDO PRETO ATUALIZADO */}
-                    <div className="bg-gray-950 p-6 rounded-xl shadow-sm border border-gray-800 mt-6 relative z-0">
-                        <h3 className="font-bold text-gray-400 mb-2 text-sm uppercase tracking-wide">Evolução do Faturamento</h3>
+                    <div className="bg-gray-900 p-4 md:p-6 rounded-2xl shadow-xl border border-gray-800 mt-6 relative z-0">
+                        <h3 className="font-black text-gray-300 mb-2 text-xs md:text-sm uppercase tracking-widest border-b border-gray-800 pb-2">Evolução do Faturamento Diário</h3>
 
                         {pts.length === 0 ? (
-                            <p className="text-center text-gray-500 py-10 italic">Sem vendas registradas neste período.</p>
+                            <p className="text-center text-gray-600 py-16 italic font-bold">Sem vendas registradas neste período.</p>
                         ) : (
-                            <div className="w-full relative pb-4 pt-4">
+                            <div className="w-full relative pb-2 pt-2 md:pt-4">
                                 <div className="w-full overflow-x-auto custom-scrollbar relative">
                                     <div className="relative" style={{ height: `${svgHeight}px`, minWidth: `${svgWidth}px` }}>
 
                                         {tooltip.visivel && tooltip.p && (
                                             <div
-                                                className="absolute z-50 bg-gray-900 text-white p-3 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-75 min-w-[140px]"
+                                                className="absolute z-50 bg-white text-gray-800 p-3 md:p-4 rounded-xl shadow-2xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-100 min-w-[150px] border border-gray-200"
                                                 style={{
                                                     left: `${(tooltip.p.x / svgWidth) * 100}%`,
-                                                    top: `calc(${(tooltip.p.y / svgHeight) * 100}% - 15px)`
+                                                    top: `calc(${(tooltip.p.y / svgHeight) * 100}% - 20px)`
                                                 }}
                                             >
-                                                <div className="font-black text-xs text-center border-b border-gray-700 pb-1 mb-2">{tooltip.p.dataCurta}</div>
+                                                <div className="font-black text-sm text-center border-b border-gray-200 pb-2 mb-3 text-cafe-dark">{tooltip.p.dataCurta}</div>
 
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between items-center text-xs text-gray-300">
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold">
                                                         <span>Bruto:</span>
-                                                        <span className="font-bold text-gray-100 ml-2">{formatarMoeda(tooltip.p.valor)}</span>
+                                                        <span className="font-black text-gray-900 ml-3">{formatarMoeda(tooltip.p.valor)}</span>
                                                     </div>
-                                                    <div className="flex justify-between items-center text-xs text-gray-300">
+                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold">
                                                         <span>Custo:</span>
-                                                        <span className="font-bold text-red-400 ml-2">{formatarMoeda(tooltip.p.custo)}</span>
+                                                        <span className="font-black text-red-500 ml-3">{formatarMoeda(tooltip.p.custo)}</span>
                                                     </div>
-                                                    <div className="flex justify-between items-center text-xs text-gray-300">
-                                                        <span>Lucro:</span>
-                                                        <span className="font-bold text-green-400 ml-2">{formatarMoeda(tooltip.p.lucro)}</span>
+                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold bg-green-50 p-1.5 rounded-md border border-green-100">
+                                                        <span className="text-green-800">Lucro:</span>
+                                                        <span className="font-black text-green-700 ml-3">{formatarMoeda(tooltip.p.lucro)}</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex justify-between items-center text-xs text-gray-300 mt-2 pt-2 border-t border-gray-700">
+                                                <div className="flex justify-between items-center text-xs text-gray-500 mt-3 pt-2 border-t border-gray-200 font-bold">
                                                     <span>Qtd Vendas:</span>
-                                                    <span className="font-bold text-blue-300 ml-2">{tooltip.p.qtd}</span>
+                                                    <span className="font-black text-blue-600 ml-2">{tooltip.p.qtd} un</span>
                                                 </div>
 
-                                                <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full border-[6px] border-transparent border-t-gray-900"></div>
+                                                <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full border-[8px] border-transparent border-t-white"></div>
                                             </div>
                                         )}
 
                                         <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-full absolute inset-0 overflow-visible">
                                             <defs>
                                                 <linearGradient id="gradientLinha" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.4} />
+                                                    <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.6} />
                                                     <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
 
-                                            {/* Ajustado as linhas de grade para um cinza escuro sutil sobre o fundo preto */}
                                             {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
                                                 const yPos = padYTop + (usableHeight * ratio);
-                                                return <line key={idx} x1={padX} y1={yPos} x2={svgWidth - padX} y2={yPos} stroke="#1f2937" strokeWidth="1" strokeDasharray="4 4" />
+                                                return <line key={idx} x1={padX} y1={yPos} x2={svgWidth - padX} y2={yPos} stroke="#374151" strokeWidth="1" strokeDasharray="4 4" />
                                             })}
 
                                             {pts.length > 1 && <path d={pathArea} fill="url(#gradientLinha)" />}
-                                            {pts.length > 1 && <path d={pathLinha} fill="none" stroke="#0ea5e9" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-                                            {pts.length === 1 && <circle cx={pts[0].x} cy={pts[0].y} r="5" fill="#0ea5e9" />}
+                                            {pts.length > 1 && <path d={pathLinha} fill="none" stroke="#38bdf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
+                                            {pts.length === 1 && <circle cx={pts[0].x} cy={pts[0].y} r="6" fill="#38bdf8" />}
 
                                             {pts.map((p, i) => (
                                                 <g
                                                     key={i}
                                                     onMouseEnter={() => setTooltip({ visivel: true, p })}
                                                     onMouseLeave={() => setTooltip({ visivel: false, p: null })}
-                                                    className="cursor-crosshair outline-none"
+                                                    onClick={() => setTooltip(prev => ({ visivel: !prev.visivel, p }))}
+                                                    className="cursor-pointer md:cursor-crosshair outline-none"
                                                 >
                                                     {tooltip.visivel && tooltip.p?.dataCurta === p.dataCurta && (
-                                                        <line x1={p.x} y1={padYTop} x2={p.x} y2={padYBot} stroke="#4b5563" strokeWidth="1" strokeDasharray="2 2" />
+                                                        <line x1={p.x} y1={padYTop} x2={p.x} y2={padYBot} stroke="#6b7280" strokeWidth="1.5" strokeDasharray="3 3" />
                                                     )}
 
-                                                    <text x={p.x} y={padYBot + 25} textAnchor="middle" fill="#9ca3af" fontSize="10" fontWeight="bold">{p.dataCurta}</text>
+                                                    <text x={p.x} y={padYBot + 25} textAnchor="middle" fill="#9ca3af" fontSize="11" fontWeight="bold">{p.dataCurta}</text>
 
-                                                    <circle cx={p.x} cy={p.y} r="30" fill="transparent" />
+                                                    <circle cx={p.x} cy={p.y} r="25" fill="transparent" />
 
                                                     <circle
                                                         cx={p.x}
                                                         cy={p.y}
-                                                        r={tooltip.visivel && tooltip.p?.dataCurta === p.dataCurta ? "6" : "4"}
-                                                        className="fill-white stroke-[#0ea5e9] transition-all"
-                                                        strokeWidth="2"
+                                                        r={tooltip.visivel && tooltip.p?.dataCurta === p.dataCurta ? "7" : "4"}
+                                                        className="fill-gray-900 stroke-[#38bdf8] transition-all"
+                                                        strokeWidth="3"
                                                     />
                                                 </g>
                                             ))}
@@ -434,52 +435,86 @@ export default function DashboardRendimentos() {
                     {/* GRIDS INFERIORES */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                            <h3 className="font-bold text-gray-700 mb-4 border-b pb-2 text-sm uppercase tracking-wide">Recebimentos</h3>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">📱 PIX</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalPix)}</span></div>
-                                <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💵 Dinheiro</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalDinheiro)}</span></div>
-                                <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💳 Cartão de Crédito</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalCredito)}</span></div>
-                                <div className="flex justify-between items-center"><span className="text-sm text-gray-600 font-semibold">💳 Cartão de Débito</span><span className="font-bold text-gray-800">{formatarMoeda(metricas.financeiro.totalDebito)}</span></div>
+                        <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full">
+                            <h3 className="font-black text-cafe-dark mb-4 border-b border-gray-100 pb-2 text-sm uppercase tracking-wider">Detalhamento de Entradas</h3>
+                            <div className="space-y-3 flex-1 flex flex-col">
+                                <div className="flex justify-between items-center p-2.5 bg-gray-50 rounded-xl"><span className="text-xs md:text-sm text-gray-600 font-bold uppercase tracking-wide">📱 PIX</span><span className="font-black text-gray-800 text-sm md:text-base">{formatarMoeda(metricas.financeiro.totalPix)}</span></div>
+                                <div className="flex justify-between items-center p-2.5 bg-green-50/50 rounded-xl border border-green-50"><span className="text-xs md:text-sm text-green-700 font-bold uppercase tracking-wide">💵 Dinheiro</span><span className="font-black text-green-700 text-sm md:text-base">{formatarMoeda(metricas.financeiro.totalDinheiro)}</span></div>
+                                <div className="flex justify-between items-center p-2.5 bg-gray-50 rounded-xl"><span className="text-xs md:text-sm text-gray-600 font-bold uppercase tracking-wide">💳 C. Crédito</span><span className="font-black text-gray-800 text-sm md:text-base">{formatarMoeda(metricas.financeiro.totalCredito)}</span></div>
+                                <div className="flex justify-between items-center p-2.5 bg-gray-50 rounded-xl"><span className="text-xs md:text-sm text-gray-600 font-bold uppercase tracking-wide">💳 C. Débito</span><span className="font-black text-gray-800 text-sm md:text-base">{formatarMoeda(metricas.financeiro.totalDebito)}</span></div>
 
-                                <div className="pt-3 mt-3 border-t border-gray-100 space-y-3">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-700 font-bold">💰 Total Recebido</span>
-                                        <span className="font-black text-green-600">{formatarMoeda(metricas.faturamentoTotal)}</span>
+                                <div className="mt-auto pt-4 space-y-3 border-t-2 border-dashed border-gray-200">
+                                    <div className="flex justify-between items-center bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                        <span className="text-xs text-blue-800 font-black uppercase tracking-wider">Bruto Total</span>
+                                        <span className="font-black text-lg text-blue-700">{formatarMoeda(metricas.faturamentoTotal)}</span>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-700 font-bold">📉 Total Gasto (Custo)</span>
-                                        <span className="font-black text-red-500">{formatarMoeda(metricas.custoTotal)}</span>
+                                    <div className="flex justify-between items-center bg-red-50 p-3 rounded-xl border border-red-100">
+                                        <span className="text-xs text-red-800 font-black uppercase tracking-wider">Custo Produtos</span>
+                                        <span className="font-black text-lg text-red-600">-{formatarMoeda(metricas.custoTotal)}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
-                            <h3 className="font-bold text-gray-700 mb-4 border-b pb-2 text-sm uppercase tracking-wide">Top 5 Produtos Mais Vendidos</h3>
-                            <div className="overflow-x-auto">
+                        <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
+                            <h3 className="font-black text-cafe-dark mb-4 border-b border-gray-100 pb-2 text-sm uppercase tracking-wider">Top 5 Produtos (Curva ABC)</h3>
+
+                            {/* VIEW MOBILE: Lista de Cards */}
+                            <div className="md:hidden space-y-3">
+                                {metricas.produtosMaisVendidos.map((prod, idx) => (
+                                    <div key={idx} className="bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-cafe-primary"></div>
+                                        <div className="flex justify-between items-start">
+                                            <span className="font-black text-gray-800 text-base leading-tight pr-4">{idx + 1}. {prod.nome}</span>
+                                            <span className="bg-white border border-gray-200 text-cafe-dark font-black px-2 py-1 rounded-md text-xs whitespace-nowrap shadow-sm">{prod.quantidade} un</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <div className="bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm">
+                                                <span className="block text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Custo</span>
+                                                <span className="font-bold text-red-500">{formatarMoeda(prod.custo)}</span>
+                                            </div>
+                                            <div className="bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm">
+                                                <span className="block text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Faturou</span>
+                                                <span className="font-bold text-gray-800">{formatarMoeda(prod.faturamento)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-green-100/50 p-3 rounded-lg border border-green-200 flex justify-between items-center mt-1">
+                                            <span className="text-[10px] text-green-800 uppercase font-black tracking-widest">Lucro Gerado</span>
+                                            <span className="font-black text-green-700 text-lg">{formatarMoeda(prod.lucro)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {metricas.produtosMaisVendidos.length === 0 && (
+                                    <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500 font-medium text-sm">
+                                        Nenhuma venda registada no período.
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* VIEW DESKTOP: Tabela */}
+                            <div className="hidden md:block overflow-x-auto custom-scrollbar">
                                 <table className="w-full text-left border-collapse text-sm">
                                     <thead>
-                                        <tr className="text-gray-400 font-semibold border-b">
-                                            <th className="pb-2">PRODUTO</th>
-                                            <th className="pb-2 text-center">QTD</th>
-                                            <th className="pb-2 text-right">CUSTO</th>
-                                            <th className="pb-2 text-right">VALOR BRUTO</th>
-                                            <th className="pb-2 text-right">LUCRO</th>
+                                        <tr className="text-gray-400 font-black text-xs uppercase tracking-wider border-b border-gray-200 bg-gray-50">
+                                            <th className="p-3">Produto</th>
+                                            <th className="p-3 text-center">Volume</th>
+                                            <th className="p-3 text-right">Custo</th>
+                                            <th className="p-3 text-right">Faturamento</th>
+                                            <th className="p-3 text-right">Lucro</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {metricas.produtosMaisVendidos.map((prod, idx) => (
-                                            <tr key={idx} className="border-b last:border-0 hover:bg-gray-50 transition">
-                                                <td className="py-3 font-semibold text-gray-800">{idx + 1}. {prod.nome}</td>
-                                                <td className="py-3 text-center font-bold text-gray-600">{prod.quantidade} un</td>
-                                                <td className="py-3 text-right text-red-500 font-medium">{formatarMoeda(prod.custo)}</td>
-                                                <td className="py-3 text-right font-bold text-gray-700">{formatarMoeda(prod.faturamento)}</td>
-                                                <td className="py-3 text-right font-black text-green-600">{formatarMoeda(prod.lucro)}</td>
+                                            <tr key={idx} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+                                                <td className="p-3 font-bold text-gray-800 text-base">{idx + 1}. {prod.nome}</td>
+                                                <td className="p-3 text-center font-black text-gray-600 bg-gray-50/50">{prod.quantidade} <span className="text-xs font-bold text-gray-400">un</span></td>
+                                                <td className="p-3 text-right text-red-500 font-semibold">{formatarMoeda(prod.custo)}</td>
+                                                <td className="p-3 text-right font-black text-gray-700">{formatarMoeda(prod.faturamento)}</td>
+                                                <td className="p-3 text-right font-black text-green-600 text-base">{formatarMoeda(prod.lucro)}</td>
                                             </tr>
                                         ))}
                                         {metricas.produtosMaisVendidos.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-400 italic">Nenhuma venda registada.</td></tr>
+                                            <tr><td colSpan={5} className="text-center py-10 text-gray-400 italic font-medium">Nenhuma venda registada.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

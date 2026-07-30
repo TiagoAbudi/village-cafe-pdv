@@ -312,16 +312,17 @@ export default function DashboardModulo() {
 
   if (!caixaAtual) {
     return (
-      <div className="relative max-w-md mx-auto p-6 bg-cafe-card dark:bg-gray-800 rounded-lg shadow-md border border-cafe-secondary/20 dark:border-gray-700 my-12 text-center overflow-hidden transition-colors duration-300">
-        {feedback.tipo && (<div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}><p className="text-sm font-semibold">{feedback.msg}</p></div>)}
+      <div className="relative max-w-md mx-auto p-4 md:p-6 bg-cafe-card dark:bg-gray-800 rounded-lg shadow-md border border-cafe-secondary/20 dark:border-gray-700 my-8 md:my-12 text-center overflow-hidden transition-colors duration-300 w-[95%]">
+        {feedback.tipo && (<div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}><p className="text-sm font-semibold">{feedback.msg}</p></div>)}
         <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-600 dark:text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">💰</div>
         <h2 className="text-2xl font-bold text-cafe-dark dark:text-gray-100 mb-2">Caixa Fechado</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Para iniciar o dia e registar vendas, abra o caixa informando o fundo de troco atual da gaveta.</p>
         <div className="text-left mb-4">
           <label className="block text-sm font-semibold text-cafe-dark dark:text-gray-200 mb-1">Fundo de Troco (R$)</label>
-          <input type="number" className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-cafe-secondary text-center text-lg font-bold" value={fundoTroco} onChange={(e) => setFundoTroco(e.target.value === '' ? '' : Number(e.target.value))} />
+          {/* Ajuste: text-base no input para evitar zoom automático no iOS */}
+          <input type="number" placeholder="Ex: 50,00" className="w-full p-4 md:p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-cafe-secondary text-center text-lg md:text-xl font-bold text-base" value={fundoTroco} onChange={(e) => setFundoTroco(e.target.value === '' ? '' : Number(e.target.value))} />
         </div>
-        <button onClick={abrirCaixa} className="w-full bg-green-600 text-white font-bold py-3 rounded shadow hover:bg-green-700 active:scale-95">ABRIR CAIXA</button>
+        <button onClick={abrirCaixa} className="w-full bg-green-600 text-white font-bold py-4 md:py-3 rounded-lg shadow hover:bg-green-700 active:scale-95 transition">ABRIR CAIXA</button>
       </div>
     );
   }
@@ -329,26 +330,26 @@ export default function DashboardModulo() {
   const caixa = caixaAtual;
 
   return (
-    <div className="relative max-w-6xl mx-auto p-6 bg-cafe-card dark:bg-gray-900 rounded-lg shadow-md border border-cafe-secondary/20 dark:border-gray-700 my-8 transition-colors duration-300">
+    <div className="relative max-w-6xl mx-auto p-4 md:p-6 bg-cafe-card dark:bg-gray-900 rounded-lg shadow-md border border-cafe-secondary/20 dark:border-gray-700 my-4 md:my-8 transition-colors duration-300">
 
-      {feedback.tipo && (<div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}><p className="text-sm font-semibold">{feedback.msg}</p></div>)}
+      {feedback.tipo && (<div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}><p className="text-sm font-semibold">{feedback.msg}</p></div>)}
 
-      {/* MODAL: RESUMO FINANCEIRO CLEAN E ORGANIZADO */}
+      {/* MODAL: RESUMO FINANCEIRO */}
       {modalResumo && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden font-sans border border-gray-200 dark:border-gray-700 relative">
-            <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-between items-center">
+            <div className="p-4 md:p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-black text-gray-800 dark:text-white">Resumo do Turno</h3>
                 <p className="text-xs text-gray-400 mt-0.5">Fechamento e conferência de valores</p>
               </div>
-              <div className="flex gap-4 items-center">
-                <button onClick={handleImprimirResumo} className="hover:opacity-70 text-base transition p-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg" title="Imprimir Relatório">🖨️ Imprimir</button>
-                <button onClick={() => setModalResumo(false)} className="text-gray-400 hover:text-red-500 font-bold transition text-lg">×</button>
+              <div className="flex gap-2 items-center">
+                <button onClick={handleImprimirResumo} className="hover:opacity-70 text-base transition p-2 bg-gray-200 dark:bg-gray-700 rounded-lg" title="Imprimir Relatório">🖨️</button>
+                <button onClick={() => setModalResumo(false)} className="text-gray-400 hover:text-red-500 font-bold transition text-2xl px-2">✕</button>
               </div>
             </div>
 
-            <div className="p-6 space-y-5 text-sm max-h-[75vh] overflow-y-auto">
+            <div className="p-4 md:p-6 space-y-4 md:space-y-5 text-sm max-h-[75vh] overflow-y-auto">
               <div className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-700/50 p-3 rounded-xl border border-gray-100 dark:border-gray-600 flex justify-between">
                 <span>Abertura: <strong>{formatarDataHoraCompleta(caixa.data_abertura)}</strong></span>
                 <span>Op: <strong>{vendasHoje[0]?.atendente || 'Admin'}</strong></span>
@@ -356,18 +357,18 @@ export default function DashboardModulo() {
 
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-2.5 shadow-sm">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">💵 Movimentação da Gaveta</h4>
-                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Saldo Inicial (Troco):</span><span className="font-medium">{formatarMoeda(caixa.fundo_inicial)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Saldo Inicial:</span><span className="font-medium">{formatarMoeda(caixa.fundo_inicial)}</span></div>
                 <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Vendas em Dinheiro:</span><span className="font-medium text-green-600">{formatarMoeda(totalDinheiro)}</span></div>
-                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Suprimentos (Aportes):</span><span className="font-medium text-green-600">{formatarMoeda(suprimentosTotais)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(+) Suprimentos:</span><span className="font-medium text-green-600">{formatarMoeda(suprimentosTotais)}</span></div>
                 <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>(-) Sangrias / Despesas:</span><span className="font-medium text-red-500">-{formatarMoeda(sangriasEDespesasTotais)}</span></div>
-                <div className="flex justify-between font-bold pt-2 border-t text-gray-800 dark:text-white text-base"><span>= Dinheiro Esperado:</span><span className="text-cafe-primary dark:text-cafe-secondary">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span></div>
+                <div className="flex justify-between font-bold pt-2 border-t text-gray-800 dark:text-white text-base mt-2"><span>= Dinheiro Esperado:</span><span className="text-cafe-primary dark:text-cafe-secondary">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span></div>
               </div>
 
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-2.5 shadow-sm">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📱 Faturamento Digital (Outros Meios)</h4>
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📱 Faturamento Digital</h4>
                 <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>📱 Via PIX:</span><span className="font-medium">{formatarMoeda(totalPix)}</span></div>
-                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>💳 Cartão de Crédito:</span><span className="font-medium">{formatarMoeda(totalCartaoCred)}</span></div>
-                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>💳 Cartão de Débito:</span><span className="font-medium">{formatarMoeda(totalCartaoDeb)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>💳 C. Crédito:</span><span className="font-medium">{formatarMoeda(totalCartaoCred)}</span></div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>💳 C. Débito:</span><span className="font-medium">{formatarMoeda(totalCartaoDeb)}</span></div>
               </div>
 
               <div className="bg-gray-900 text-white p-4 rounded-xl space-y-2.5 shadow-md">
@@ -383,62 +384,66 @@ export default function DashboardModulo() {
 
       {/* MODAL: EDIÇÃO DE VENDA */}
       {vendaEmEdicao && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
-            <div className="flex justify-between items-center mb-6 border-b dark:border-gray-700 pb-3">
-              <h3 className="text-xl font-bold text-cafe-primary dark:text-cafe-secondary">Editar Venda: {vendaEmEdicao.identificacao_pedido}</h3>
-              <button onClick={() => setVendaEmEdicao(null)} className="text-gray-500 hover:text-red-500 font-bold text-xl">X</button>
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-4 md:p-6 w-full max-w-4xl h-[95vh] md:h-auto md:max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700 flex flex-col">
+            <div className="flex justify-between items-center mb-4 md:mb-6 border-b dark:border-gray-700 pb-3">
+              <h3 className="text-lg md:text-xl font-bold text-cafe-primary dark:text-cafe-secondary truncate pr-2">Editar: {vendaEmEdicao.identificacao_pedido}</h3>
+              <button onClick={() => setVendaEmEdicao(null)} className="text-gray-500 hover:text-red-500 font-bold text-2xl px-2">✕</button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 flex-1">
+              {/* Lado Esquerdo: Itens */}
+              <div className="flex flex-col">
                 <h4 className="font-semibold mb-3 dark:text-gray-200">Itens do Pedido</h4>
                 <div className="flex gap-2 mb-4">
-                  <select className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 text-sm" value={produtoAddId} onChange={(e) => setProdutoAddId(e.target.value)}>
+                  <select className="flex-1 p-3 md:p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 text-base md:text-sm outline-none" value={produtoAddId} onChange={(e) => setProdutoAddId(e.target.value)}>
                     <option value="">+ Adicionar Item...</option>
                     {produtosDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome} - {formatarMoeda(p.preco_venda)}</option>)}
                   </select>
-                  <button onClick={adicionarProdutoEdicao} className="bg-cafe-secondary text-cafe-dark font-bold px-3 rounded shadow-sm">Add</button>
+                  <button onClick={adicionarProdutoEdicao} className="bg-cafe-secondary text-cafe-dark font-bold px-4 py-3 md:py-2 rounded-lg shadow-sm">Add</button>
                 </div>
 
-                <ul className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                <ul className="space-y-2 overflow-y-auto max-h-[30vh] md:max-h-64 pr-2 border-b md:border-none border-gray-200 pb-4 md:pb-0 mb-4 md:mb-0">
                   {carrinhoEdicao.map(item => (
-                    <li key={item.produto_id} className="bg-gray-50 dark:bg-gray-700 p-2 rounded border dark:border-gray-600 flex justify-between items-center text-sm">
-                      <div>
-                        <span className="font-bold block dark:text-gray-100">{item.nome}</span>
+                    <li key={item.produto_id} className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border dark:border-gray-600 flex justify-between items-center text-sm gap-2">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold block dark:text-gray-100 truncate">{item.nome}</span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">{formatarMoeda(item.preco_unitario)}</span>
                       </div>
-                      <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded px-2 py-1 shadow-sm">
-                        <button onClick={() => alterarQtdEdicao(item.produto_id, -1)} className="font-bold text-cafe-primary dark:text-cafe-secondary px-2">-</button>
+                      <div className="flex items-center gap-2 md:gap-3 bg-white dark:bg-gray-800 rounded-lg px-1 md:px-2 py-1 shadow-sm border border-gray-100 dark:border-gray-600">
+                        <button onClick={() => alterarQtdEdicao(item.produto_id, -1)} className="font-bold text-cafe-primary dark:text-cafe-secondary w-8 h-8 rounded hover:bg-gray-100 flex items-center justify-center">-</button>
                         <span className="font-bold w-4 text-center dark:text-gray-100">{item.quantidade}</span>
-                        <button onClick={() => alterarQtdEdicao(item.produto_id, 1)} className="font-bold text-cafe-primary dark:text-cafe-secondary px-2">+</button>
+                        <button onClick={() => alterarQtdEdicao(item.produto_id, 1)} className="font-bold text-cafe-primary dark:text-cafe-secondary w-8 h-8 rounded hover:bg-gray-100 flex items-center justify-center">+</button>
                       </div>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border dark:border-gray-600">
-                <h4 className="font-semibold mb-4 border-b dark:border-gray-600 pb-2 dark:text-gray-200">Refazer Pagamentos</h4>
+              {/* Lado Direito: Pagamentos */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 md:p-5 rounded-xl border dark:border-gray-600 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-semibold mb-4 border-b dark:border-gray-600 pb-2 dark:text-gray-200">Refazer Pagamentos</h4>
 
-                <div className="flex justify-between items-center text-2xl font-black mb-4">
-                  <span className="dark:text-gray-100">Total:</span>
-                  <span className="text-blue-600 dark:text-blue-400">{formatarMoeda(totalEdicao)}</span>
+                  <div className="flex justify-between items-center text-2xl md:text-3xl font-black mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                    <span className="dark:text-gray-100 text-lg">Total:</span>
+                    <span className="text-blue-600 dark:text-blue-400">{formatarMoeda(totalEdicao)}</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">PIX</label><input type="number" placeholder="R$ 0,00" className="flex-1 p-3 md:p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-base outline-none focus:ring-2 focus:ring-blue-400" value={editPix} onChange={(e) => setEditPix(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+                    <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Dinheiro</label><input type="number" placeholder="R$ 0,00" className="flex-1 p-3 md:p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-base outline-none focus:ring-2 focus:ring-blue-400" value={editDinheiro} onChange={(e) => setEditDinheiro(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+                    <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Crédito</label><input type="number" placeholder="R$ 0,00" className="flex-1 p-3 md:p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-base outline-none focus:ring-2 focus:ring-blue-400" value={editCredito} onChange={(e) => setEditCredito(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+                    <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Débito</label><input type="number" placeholder="R$ 0,00" className="flex-1 p-3 md:p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white text-base outline-none focus:ring-2 focus:ring-blue-400" value={editDebito} onChange={(e) => setEditDebito(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+                  </div>
+
+                  <div className={`mt-6 text-center font-bold text-sm p-3 rounded-lg border ${totalPagoEdicao === totalEdicao ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}`}>
+                    Soma dos Pagamentos: {formatarMoeda(totalPagoEdicao)}
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">PIX</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editPix} onChange={(e) => setEditPix(Number(e.target.value))} /></div>
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Dinheiro</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editDinheiro} onChange={(e) => setEditDinheiro(Number(e.target.value))} /></div>
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Crédito</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editCredito} onChange={(e) => setEditCredito(Number(e.target.value))} /></div>
-                  <div className="flex items-center gap-3"><label className="w-20 text-sm font-semibold dark:text-gray-300">Débito</label><input type="number" className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={editDebito} onChange={(e) => setEditDebito(Number(e.target.value))} /></div>
-                </div>
-
-                <div className={`mt-4 text-center font-bold text-sm p-2 rounded ${totalPagoEdicao === totalEdicao ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  Soma dos Pagamentos: {formatarMoeda(totalPagoEdicao)}
-                </div>
-
-                <button onClick={salvarEdicaoVenda} className="w-full bg-blue-600 text-white font-bold py-3 rounded mt-4 shadow hover:bg-blue-700 active:scale-95 transition">
-                  Salvar Alterações da Venda
+                <button onClick={salvarEdicaoVenda} className="w-full bg-blue-600 text-white font-bold py-4 md:py-3 rounded-lg mt-6 shadow-lg hover:bg-blue-700 active:scale-95 transition text-lg md:text-base">
+                  Salvar Alterações
                 </button>
               </div>
             </div>
@@ -448,123 +453,169 @@ export default function DashboardModulo() {
 
       {/* MODAL: CANCELAMENTO DE VENDA */}
       {vendaParaCancelar && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-xl font-bold text-red-600 mb-2">Cancelar Venda Inteira</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">Deseja cancelar a venda <strong>{vendaParaCancelar.identificacao_pedido}</strong>? O valor será subtraído do caixa e o estoque restaurado.</p>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 max-w-sm w-full text-center">
+            <div className="text-red-500 text-5xl mb-4">⚠️</div>
+            <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-2">Cancelar Venda</h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm px-2">Deseja cancelar o pedido <strong>{vendaParaCancelar.identificacao_pedido}</strong>? O valor sairá do caixa e o estoque será restaurado.</p>
             <div className="flex gap-3">
-              <button onClick={() => setVendaParaCancelar(null)} className="flex-1 bg-gray-100 dark:bg-gray-700 dark:text-white rounded font-semibold transition">Voltar</button>
-              <button onClick={confirmarCancelamentoVenda} className="flex-1 bg-red-600 text-white py-2 rounded font-semibold shadow hover:bg-red-700">Sim, Cancelar</button>
+              <button onClick={() => setVendaParaCancelar(null)} className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:text-white py-3 rounded-xl font-bold transition">Voltar</button>
+              <button onClick={confirmarCancelamentoVenda} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow transition">Sim, Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: FECHAMENTO DE CAIXA COM AUDITORIA CEGA / QUEBRAS */}
+      {/* MODAL: FECHAMENTO DE CAIXA */}
       {modalConfirmacao && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 max-w-md w-full border dark:border-gray-700">
-            <h3 className="text-xl font-black text-gray-800 dark:text-white mb-2">Encerrar Turno e Conferir Caixa</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Insira abaixo o valor total em dinheiro que está fisicamente na gaveta agora.</p>
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-6 max-w-md w-full border dark:border-gray-700">
+            <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-2 text-center">Encerrar Turno</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 text-center">Insira abaixo o valor total em dinheiro físico que está na gaveta agora.</p>
 
-            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl mb-5 text-sm space-y-1">
-              <div className="flex justify-between text-gray-500">
-                <span>Dinheiro Esperado em Sistema:</span>
-                <span className="font-bold text-gray-800 dark:text-gray-200">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span>
+            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-2xl mb-6 text-sm">
+              <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
+                <span className="font-semibold">Esperado no Sistema:</span>
+                <span className="font-black text-lg text-cafe-primary dark:text-cafe-secondary">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span>
               </div>
             </div>
 
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Contado na Gaveta (R$)</label>
+            <div className="mb-8">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 text-center">Total Contado na Gaveta (R$)</label>
               <input
                 type="number"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 outline-none focus:ring-2 focus:ring-red-500 text-center text-2xl font-black"
+                className="w-full p-4 border-2 border-gray-200 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 outline-none focus:border-red-500 focus:ring-4 focus:ring-red-500/20 text-center text-3xl font-black text-base transition-all"
                 value={valorFechamentoInput}
                 onChange={(e) => setValorFechamentoInput(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="0,00"
+                autoFocus
               />
             </div>
 
-            <div className="flex gap-3">
-              <button onClick={() => { setModalConfirmacao(false); setValorFechamentoInput(''); }} className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 dark:text-white rounded-xl font-semibold transition text-sm">Cancelar</button>
-              <button onClick={confirmarFechamentoCaixa} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-semibold shadow hover:bg-red-700 transition text-sm">Encerrar Caixa</button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={() => { setModalConfirmacao(false); setValorFechamentoInput(''); }} className="w-full sm:flex-1 py-4 sm:py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:text-white rounded-xl font-bold transition">Cancelar</button>
+              <button onClick={confirmarFechamentoCaixa} className="w-full sm:flex-1 py-4 sm:py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-lg transition">Encerrar Caixa</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* DASHBOARD NORMAL */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
+      {/* HEADER DASHBOARD */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-cafe-primary dark:text-cafe-secondary">Fechamento e Dashboard</h2>
-          <p className="text-sm text-green-600 font-semibold mt-1">🟢 Caixa Aberto</p>
+          <h2 className="text-2xl font-bold text-cafe-primary dark:text-cafe-secondary">Dashboard Financeiro</h2>
+          <p className="text-sm text-green-600 font-semibold mt-1 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span> Caixa Aberto</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setModalResumo(true)} className="bg-white dark:bg-gray-700 text-cafe-dark dark:text-gray-100 border border-gray-300 dark:border-gray-500 px-4 py-2 rounded font-bold text-sm shadow-sm hover:bg-gray-50 active:scale-95 flex items-center gap-2">
-            📊 Resumo Financeiro
+        <div className="flex flex-wrap w-full lg:w-auto gap-2">
+          <button onClick={() => setModalResumo(true)} className="flex-1 lg:flex-none justify-center bg-white dark:bg-gray-700 text-cafe-dark dark:text-gray-100 border border-gray-300 dark:border-gray-500 px-4 py-3 md:py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 active:scale-95 flex items-center gap-2 transition">
+            📊 Resumo
           </button>
-          <button onClick={() => verificarStatusCaixa()} className="bg-cafe-bg dark:bg-gray-800 text-cafe-dark dark:text-gray-100 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded font-bold text-sm shadow-sm hover:bg-gray-50 active:scale-95">Atualizar</button>
-          <button onClick={() => setModalConfirmacao(true)} className="bg-red-600 text-white px-4 py-2 rounded font-bold text-sm shadow hover:bg-red-700 active:scale-95">Encerrar Dia</button>
+          <button onClick={() => verificarStatusCaixa()} className="flex-1 lg:flex-none justify-center bg-cafe-bg dark:bg-gray-800 text-cafe-dark dark:text-gray-100 border border-gray-300 dark:border-gray-600 px-4 py-3 md:py-2 rounded-lg font-bold text-sm shadow-sm hover:bg-gray-50 active:scale-95 transition">
+            🔄 Atualizar
+          </button>
+          <button onClick={() => setModalConfirmacao(true)} className="w-full lg:w-auto bg-red-600 text-white px-6 py-3 md:py-2 rounded-lg font-bold text-sm shadow-md hover:bg-red-700 active:scale-95 transition">
+            Encerrar Dia
+          </button>
         </div>
       </div>
 
-      <div className="space-y-6 mb-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-cafe-primary dark:bg-gray-800 border dark:border-gray-700 text-white p-6 rounded-lg shadow text-center">
-            <h3 className="text-sm font-semibold opacity-90 mb-1">Total Vendido</h3>
-            <span className="text-4xl font-bold">{formatarMoeda(faturamentoTotal)}</span>
+      {/* CARDS DE MÉTRICAS */}
+      <div className="space-y-4 md:space-y-6 mb-8 md:mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-cafe-primary dark:bg-gray-800 border dark:border-gray-700 text-white p-6 rounded-xl shadow-md flex flex-col justify-center items-center">
+            <h3 className="text-sm font-semibold opacity-90 mb-1 uppercase tracking-wider">Total Vendido</h3>
+            <span className="text-3xl md:text-4xl font-black">{formatarMoeda(faturamentoTotal)}</span>
           </div>
-          <div className="bg-green-600 dark:bg-green-700 border dark:border-green-600 text-white p-6 rounded-lg shadow text-center">
-            <h3 className="text-sm font-semibold opacity-90 mb-1">Físico Esperado na Gaveta</h3>
-            <span className="text-4xl font-bold">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span>
+          <div className="bg-green-600 dark:bg-green-700 border dark:border-green-600 text-white p-6 rounded-xl shadow-md flex flex-col justify-center items-center">
+            <h3 className="text-sm font-semibold opacity-90 mb-1 uppercase tracking-wider">Físico Esperado (Gaveta)</h3>
+            <span className="text-3xl md:text-4xl font-black">{formatarMoeda(dinheiroEsperadoNaGaveta)}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-cafe-bg dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-sm">Via PIX</h4><span className="text-xl font-bold dark:text-gray-100">{formatarMoeda(totalPix)}</span></div>
-          <div className="bg-cafe-bg dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-sm">C. Crédito</h4><span className="text-xl font-bold dark:text-gray-100">{formatarMoeda(totalCartaoCred)}</span></div>
-          <div className="bg-cafe-bg dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-sm">C. Débito</h4><span className="text-xl font-bold dark:text-gray-100">{formatarMoeda(totalCartaoDeb)}</span></div>
-          <div className="bg-cafe-bg dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-sm">Em Dinheiro</h4><span className="text-xl font-bold dark:text-gray-100">{formatarMoeda(totalDinheiro)}</span></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 text-center shadow-sm"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-xs md:text-sm">Via PIX</h4><span className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-100">{formatarMoeda(totalPix)}</span></div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 text-center shadow-sm"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-xs md:text-sm">C. Crédito</h4><span className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-100">{formatarMoeda(totalCartaoCred)}</span></div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 text-center shadow-sm"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-xs md:text-sm">C. Débito</h4><span className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-100">{formatarMoeda(totalCartaoDeb)}</span></div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 text-center shadow-sm"><h4 className="text-gray-500 dark:text-gray-400 font-semibold mb-1 text-xs md:text-sm">Em Dinheiro</h4><span className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-100">{formatarMoeda(totalDinheiro)}</span></div>
         </div>
       </div>
 
+      {/* HISTÓRICO DE VENDAS */}
       <div>
         <h3 className="text-xl font-bold text-cafe-primary dark:text-cafe-secondary mb-4 border-b border-cafe-secondary/30 pb-2">Histórico de Vendas (Turno Atual)</h3>
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-x-auto">
+
+        {/* VIEW MOBILE: Lista de Cards (visível apenas em telas menores que 'md') */}
+        <div className="md:hidden space-y-4 mb-6">
+          {vendasHoje.map(venda => (
+            <div key={venda.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-3">
+              <div className="flex justify-between items-start border-b border-gray-100 dark:border-gray-700 pb-2">
+                <div>
+                  <span className="font-black text-gray-800 dark:text-gray-100 text-lg block">{venda.identificacao_pedido}</span>
+                  <span className="text-xs text-gray-500 flex items-center gap-1">⏰ {formatarHora(venda.data_venda)} • 👤 {venda.atendente || 'Admin'}</span>
+                </div>
+                <span className="font-black text-green-600 dark:text-green-400 text-xl">{formatarMoeda(venda.total)}</span>
+              </div>
+
+              <div>
+                <span className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded text-xs font-semibold inline-block mb-2">💳 {venda.metodo_pagamento}</span>
+                <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                  {venda.itens_venda?.map((item, idx) => (
+                    <li key={idx} className="flex justify-between">
+                      <span className="truncate pr-2"><span className="font-bold">{item.quantidade}x</span> {item.produtos?.nome || 'Item removido'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <button onClick={() => iniciarEdicao(venda)} className="flex-1 bg-blue-50 text-blue-600 dark:bg-gray-700 dark:text-blue-400 font-bold py-2.5 rounded-lg text-sm border border-blue-100 dark:border-gray-600 active:scale-95 transition">Editar</button>
+                <button onClick={() => setVendaParaCancelar(venda)} className="flex-1 bg-red-50 text-red-600 dark:bg-gray-700 dark:text-red-400 font-bold py-2.5 rounded-lg text-sm border border-red-100 dark:border-gray-600 active:scale-95 transition">Cancelar</button>
+              </div>
+            </div>
+          ))}
+          {vendasHoje.length === 0 && (
+            <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-gray-500">
+              Nenhuma venda registrada hoje.
+            </div>
+          )}
+        </div>
+
+        {/* VIEW DESKTOP: Tabela (visível apenas em telas 'md' ou maiores) */}
+        <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-max">
             <thead className="bg-cafe-bg dark:bg-gray-900 border-b dark:border-gray-700 text-sm">
               <tr>
-                <th className="p-3 font-semibold text-cafe-primary dark:text-cafe-secondary w-24">Hora</th>
-                <th className="p-3 font-semibold text-cafe-primary dark:text-cafe-secondary w-28">Pedido</th>
-                <th className="p-3 font-semibold text-cafe-primary dark:text-cafe-secondary w-36">Atendente</th>
-                <th className="p-3 font-semibold text-cafe-primary dark:text-cafe-secondary">Itens do Pedido</th>
-                <th className="p-3 font-semibold text-cafe-primary dark:text-cafe-secondary">Pagamento</th>
-                <th className="p-3 font-semibold text-cafe-primary dark:text-cafe-secondary text-right">Total</th>
-                <th className="p-3 font-semibold text-center text-cafe-primary dark:text-cafe-secondary">Ações</th>
+                <th className="p-4 font-semibold text-cafe-primary dark:text-cafe-secondary w-24">Hora</th>
+                <th className="p-4 font-semibold text-cafe-primary dark:text-cafe-secondary w-32">Pedido</th>
+                <th className="p-4 font-semibold text-cafe-primary dark:text-cafe-secondary w-36">Atendente</th>
+                <th className="p-4 font-semibold text-cafe-primary dark:text-cafe-secondary">Itens do Pedido</th>
+                <th className="p-4 font-semibold text-cafe-primary dark:text-cafe-secondary">Pagamento</th>
+                <th className="p-4 font-semibold text-cafe-primary dark:text-cafe-secondary text-right">Total</th>
+                <th className="p-4 font-semibold text-center text-cafe-primary dark:text-cafe-secondary">Ações</th>
               </tr>
             </thead>
             <tbody>
               {vendasHoje.map(venda => (
                 <tr key={venda.id} className="border-b dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                  <td className="p-3 text-gray-500 dark:text-gray-400">{formatarHora(venda.data_venda)}</td>
-                  <td className="p-3 font-bold dark:text-gray-100">{venda.identificacao_pedido}</td>
-                  <td className="p-3 text-gray-600 dark:text-gray-300 truncate max-w-[140px] font-medium">{venda.atendente || 'Desconhecido'}</td>
-                  <td className="p-3">
+                  <td className="p-4 text-gray-500 dark:text-gray-400">{formatarHora(venda.data_venda)}</td>
+                  <td className="p-4 font-bold dark:text-gray-100">{venda.identificacao_pedido}</td>
+                  <td className="p-4 text-gray-600 dark:text-gray-300 truncate max-w-[140px] font-medium">{venda.atendente || 'Desconhecido'}</td>
+                  <td className="p-4">
                     <ul className="text-xs text-gray-600 dark:text-gray-400 list-disc list-inside">
                       {venda.itens_venda?.map((item, idx) => (<li key={idx}><span className="font-semibold">{item.quantidade}x</span> {item.produtos?.nome || 'Item removido'}</li>))}
                     </ul>
                   </td>
-                  <td className="p-3"><span className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded text-xs font-semibold">{venda.metodo_pagamento}</span></td>
-                  <td className="p-3 font-bold text-green-600 dark:text-green-400 text-right">{formatarMoeda(venda.total)}</td>
-                  <td className="p-3 text-center space-x-2">
-                    <button onClick={() => iniciarEdicao(venda)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-bold px-2 py-1 bg-blue-50 dark:bg-gray-700 rounded text-xs transition">Editar</button>
-                    <button onClick={() => setVendaParaCancelar(venda)} className="text-red-500 hover:text-red-700 dark:text-red-400 font-bold px-2 py-1 bg-red-50 dark:bg-gray-700 rounded text-xs transition">Cancelar</button>
+                  <td className="p-4"><span className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded text-xs font-semibold">{venda.metodo_pagamento}</span></td>
+                  <td className="p-4 font-bold text-green-600 dark:text-green-400 text-right text-base">{formatarMoeda(venda.total)}</td>
+                  <td className="p-4 text-center space-x-2">
+                    <button onClick={() => iniciarEdicao(venda)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-bold px-3 py-1.5 bg-blue-50 dark:bg-gray-700 rounded transition border border-blue-100 dark:border-gray-600 hover:bg-blue-100">Editar</button>
+                    <button onClick={() => setVendaParaCancelar(venda)} className="text-red-500 hover:text-red-700 dark:text-red-400 font-bold px-3 py-1.5 bg-red-50 dark:bg-gray-700 rounded transition border border-red-100 dark:border-gray-600 hover:bg-red-100">Cancelar</button>
                   </td>
                 </tr>
               ))}
               {vendasHoje.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-gray-500 italic">Nenhuma venda registrada neste turno.</td>
+                  <td colSpan={7} className="p-8 text-center text-gray-500 italic">Nenhuma venda registrada neste turno.</td>
                 </tr>
               )}
             </tbody>

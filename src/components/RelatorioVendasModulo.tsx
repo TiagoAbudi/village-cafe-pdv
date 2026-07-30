@@ -111,13 +111,13 @@ export default function RelatorioVendasModulo() {
     };
 
     const renderizarIconeOrdenacao = (coluna: ColunaOrdenacao) => {
-        if (ordenacao.coluna !== coluna) return <span className="text-gray-300 ml-2 font-normal">↕</span>;
+        if (ordenacao.coluna !== coluna) return <span className="text-gray-300 ml-2 font-normal opacity-50">↕</span>;
         return ordenacao.direcao === 'asc'
-            ? <span className="text-blue-600 ml-2 font-black">↑</span>
-            : <span className="text-blue-600 ml-2 font-black">↓</span>;
+            ? <span className="text-cafe-primary ml-2 font-black">↑</span>
+            : <span className="text-cafe-primary ml-2 font-black">↓</span>;
     };
 
-    // Busca principal de Vendas (Mantido igual pois usa range que ignora o limite de 1000 total)
+    // Busca principal de Vendas
     const buscarVendas = async (pagina = 1) => {
         setCarregando(true);
         try {
@@ -148,7 +148,7 @@ export default function RelatorioVendasModulo() {
         }
     };
 
-    // Busca os totais gerais do período (NOVO MOTOR PARA PASSAR DE 1000 REGISTROS)
+    // Busca os totais gerais do período
     useEffect(() => {
         const carregarTotaisPeriodo = async () => {
             try {
@@ -248,28 +248,29 @@ export default function RelatorioVendasModulo() {
     const totalPaginas = Math.ceil(totalRegistros / itensPorPagina);
 
     return (
-        <div className="max-w-7xl mx-auto p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-8">
+        <div className="max-w-7xl mx-auto p-4 md:p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-4 md:my-8 relative">
 
             {/* CABEÇALHO E FILTROS */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b pb-4">
-                <div>
-                    <h2 className="text-2xl font-black text-cafe-primary">Auditoria de Vendas</h2>
-                    <p className="text-sm text-gray-500">Analise transações detalhadas para encontrar divergências de caixa.</p>
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4 border-b border-cafe-secondary/30 pb-4">
+                <div className="w-full lg:w-auto text-center sm:text-left">
+                    <h2 className="text-xl md:text-2xl font-black text-cafe-primary uppercase tracking-wider">Auditoria de Vendas</h2>
+                    <p className="text-xs md:text-sm text-gray-500 font-medium mt-0.5">Analise transações detalhadas para conciliação de caixa</p>
                 </div>
 
                 {/* DATEPICKER CUSTOMIZADO */}
-                <div className="flex items-center bg-white rounded-xl border border-gray-200 shadow-sm relative z-40">
-                    <div className="relative p-2 px-4 flex flex-col cursor-pointer select-none" onClick={() => { setPopoverInicioAberto(!popoverInicioAberto); setPopoverFimAberto(false); }}>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Início</span>
-                        <span className="font-bold text-sm text-gray-700 mt-0.5">{formatarDataExibicao(dataInicio)}</span>
+                <div className="flex flex-col sm:flex-row items-center bg-white rounded-xl border border-gray-200 shadow-sm relative z-40 w-full lg:w-auto">
+                    <div className="relative p-2 px-4 flex flex-1 sm:flex-none w-full sm:w-auto flex-col cursor-pointer select-none border-b sm:border-b-0 sm:border-r border-gray-100" onClick={() => { setPopoverInicioAberto(!popoverInicioAberto); setPopoverFimAberto(false); }}>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center sm:text-left">Início do Período</span>
+                        <span className="font-black text-sm text-cafe-dark mt-0.5 text-center sm:text-left">{formatarDataExibicao(dataInicio)}</span>
+
                         {popoverInicioAberto && (
-                            <div className="absolute top-14 left-0 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 z-50" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3">
-                                    <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesInicioView === 0) { setMesInicioView(11); setAnoInicioView(anoInicioView - 1); } else { setMesInicioView(mesInicioView - 1); } }}>&lt;</button>
-                                    <span className="font-bold text-xs text-gray-700 uppercase tracking-wide">{MESES[mesInicioView]} {anoInicioView}</span>
-                                    <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesInicioView === 11) { setMesInicioView(0); setAnoInicioView(anoInicioView + 1); } else { setMesInicioView(mesInicioView + 1); } }}>&gt;</button>
+                            <div className="absolute top-14 left-0 sm:left-auto bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 w-[280px] z-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesInicioView === 0) { setMesInicioView(11); setAnoInicioView(anoInicioView - 1); } else { setMesInicioView(mesInicioView - 1); } }}>&lt;</button>
+                                    <span className="font-bold text-sm text-gray-800 uppercase tracking-wide">{MESES[mesInicioView]} {anoInicioView}</span>
+                                    <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesInicioView === 11) { setMesInicioView(0); setAnoInicioView(anoInicioView + 1); } else { setMesInicioView(mesInicioView + 1); } }}>&gt;</button>
                                 </div>
-                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-1">
+                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-2">
                                     {DIAS_SEMANA.map((d, i) => <div key={`week-ini-${i}`}>{d}</div>)}
                                 </div>
                                 <div className="grid grid-cols-7 gap-1 text-center">
@@ -278,7 +279,7 @@ export default function RelatorioVendasModulo() {
                                         const dataFormatada = `${anoInicioView}-${String(mesInicioView + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
                                         const ativo = dataInicio === dataFormatada;
                                         return (
-                                            <button key={`ini-${dia}`} onClick={() => { setDataInicio(dataFormatada); setPopoverInicioAberto(false); }} className={`p-1 text-xs rounded-md font-semibold transition ${ativo ? 'bg-cafe-primary text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>{dia}</button>
+                                            <button key={`ini-${dia}`} onClick={() => { setDataInicio(dataFormatada); setPopoverInicioAberto(false); }} className={`p-2 text-sm rounded-lg font-bold transition active:scale-95 ${ativo ? 'bg-cafe-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}>{dia}</button>
                                         );
                                     })}
                                 </div>
@@ -286,19 +287,18 @@ export default function RelatorioVendasModulo() {
                         )}
                     </div>
 
-                    <div className="w-[1px] h-8 bg-gray-200 mx-1"></div>
+                    <div className="relative p-2 px-4 flex flex-1 sm:flex-none w-full sm:w-auto flex-col cursor-pointer select-none" onClick={() => { setPopoverFimAberto(!popoverFimAberto); setPopoverInicioAberto(false); }}>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center sm:text-left">Fim do Período</span>
+                        <span className="font-black text-sm text-cafe-dark mt-0.5 text-center sm:text-left">{formatarDataExibicao(dataFim)}</span>
 
-                    <div className="relative p-2 px-4 flex flex-col cursor-pointer select-none" onClick={() => { setPopoverFimAberto(!popoverFimAberto); setPopoverInicioAberto(false); }}>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Fim</span>
-                        <span className="font-bold text-sm text-gray-700 mt-0.5">{formatarDataExibicao(dataFim)}</span>
                         {popoverFimAberto && (
-                            <div className="absolute top-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 z-50" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3">
-                                    <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesFimView === 0) { setMesFimView(11); setAnoFimView(anoFimView - 1); } else { setMesFimView(mesFimView - 1); } }}>&lt;</button>
-                                    <span className="font-bold text-xs text-gray-700 uppercase tracking-wide">{MESES[mesFimView]} {anoFimView}</span>
-                                    <button className="font-black text-gray-400 hover:text-gray-700 px-1" onClick={() => { if (mesFimView === 11) { setMesFimView(0); setAnoFimView(anoFimView + 1); } else { setMesFimView(mesFimView + 1); } }}>&gt;</button>
+                            <div className="absolute top-14 right-0 sm:right-auto sm:left-auto bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 w-[280px] z-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesFimView === 0) { setMesFimView(11); setAnoFimView(anoFimView - 1); } else { setMesFimView(mesFimView - 1); } }}>&lt;</button>
+                                    <span className="font-bold text-sm text-gray-800 uppercase tracking-wide">{MESES[mesFimView]} {anoFimView}</span>
+                                    <button className="font-black text-gray-400 hover:text-cafe-primary p-2 bg-gray-50 rounded-lg transition" onClick={() => { if (mesFimView === 11) { setMesFimView(0); setAnoFimView(anoFimView + 1); } else { setMesFimView(mesFimView + 1); } }}>&gt;</button>
                                 </div>
-                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-1">
+                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-2">
                                     {DIAS_SEMANA.map((d, i) => <div key={`week-fim-${i}`}>{d}</div>)}
                                 </div>
                                 <div className="grid grid-cols-7 gap-1 text-center">
@@ -307,7 +307,7 @@ export default function RelatorioVendasModulo() {
                                         const dataFormatada = `${anoFimView}-${String(mesFimView + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
                                         const ativo = dataFim === dataFormatada;
                                         return (
-                                            <button key={`fim-${dia}`} onClick={() => { setDataFim(dataFormatada); setPopoverFimAberto(false); }} className={`p-1 text-xs rounded-md font-semibold transition ${ativo ? 'bg-cafe-primary text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>{dia}</button>
+                                            <button key={`fim-${dia}`} onClick={() => { setDataFim(dataFormatada); setPopoverFimAberto(false); }} className={`p-2 text-sm rounded-lg font-bold transition active:scale-95 ${ativo ? 'bg-cafe-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}>{dia}</button>
                                         );
                                     })}
                                 </div>
@@ -318,46 +318,73 @@ export default function RelatorioVendasModulo() {
             </div>
 
             {/* RESUMO RÁPIDO DO PERÍODO */}
-            <div className="grid grid-cols-3 gap-4 mb-6 z-10 relative">
-                <div className="bg-gray-50 border p-3 rounded-lg">
-                    <p className="text-xs font-bold text-gray-500">Total Geral (Período)</p>
-                    <p className="text-lg font-black text-gray-800">{formatarMoeda(totaisPeriodo.geral)}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-6 z-10 relative">
+                <div className="bg-gray-50 border border-gray-200 p-4 md:p-5 rounded-2xl shadow-sm text-center sm:text-left flex flex-col justify-center">
+                    <p className="text-[10px] md:text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Total Geral (Período)</p>
+                    <p className="text-2xl md:text-3xl font-black text-gray-800 leading-tight">{formatarMoeda(totaisPeriodo.geral)}</p>
                 </div>
-                <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg">
-                    <p className="text-xs font-bold text-blue-600">Total Digital (PIX/Cartões)</p>
-                    <p className="text-lg font-black text-blue-800">{formatarMoeda(totaisPeriodo.digital)}</p>
+                <div className="bg-blue-50 border border-blue-200 p-4 md:p-5 rounded-2xl shadow-sm text-center sm:text-left flex flex-col justify-center">
+                    <p className="text-[10px] md:text-xs font-black text-blue-700 uppercase tracking-widest mb-1">Meios Digitais (Pix/Cartões)</p>
+                    <p className="text-2xl md:text-3xl font-black text-blue-800 leading-tight">{formatarMoeda(totaisPeriodo.digital)}</p>
                 </div>
-                <div className="bg-green-50 border border-green-100 p-3 rounded-lg">
-                    <p className="text-xs font-bold text-green-600">Total Dinheiro</p>
-                    <p className="text-lg font-black text-green-800">{formatarMoeda(totaisPeriodo.dinheiro)}</p>
+                <div className="bg-green-50 border border-green-200 p-4 md:p-5 rounded-2xl shadow-sm text-center sm:text-left flex flex-col justify-center">
+                    <p className="text-[10px] md:text-xs font-black text-green-700 uppercase tracking-widest mb-1">Dinheiro (Físico)</p>
+                    <p className="text-2xl md:text-3xl font-black text-green-800 leading-tight">{formatarMoeda(totaisPeriodo.dinheiro)}</p>
                 </div>
             </div>
 
-            {/* TABELA DE VENDAS COM ORDENAÇÃO */}
-            <div className="bg-white border rounded-lg shadow-sm overflow-hidden z-10 relative">
+            {/* VIEW MOBILE: LISTAGEM DE VENDAS EM CARDS */}
+            <div className="md:hidden space-y-3 mb-6">
+                {carregando ? (
+                    <div className="p-8 text-center text-cafe-primary font-bold animate-pulse text-sm uppercase tracking-widest">Buscando registros...</div>
+                ) : vendas.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500 italic border border-dashed rounded-xl border-gray-300">Nenhuma venda encontrada neste período.</div>
+                ) : (
+                    vendas.map(v => (
+                        <div key={v.id} onClick={() => abrirDetalhes(v)} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3 active:bg-gray-50 transition cursor-pointer relative overflow-hidden">
+                            <div className="absolute left-0 top-0 h-full w-1.5 bg-cafe-secondary/50"></div>
+                            <div className="flex justify-between items-start pl-2">
+                                <div>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-0.5">Venda #{v.id.split('-')[0]}</span>
+                                    <span className="text-sm font-bold text-gray-800">{formatarDataHora(v.data_venda)}</span>
+                                </div>
+                                <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border border-gray-200 shadow-sm">
+                                    {v.metodo_pagamento?.toUpperCase() || 'MISTO'}
+                                </span>
+                            </div>
+                            <div className="flex justify-end items-end pt-2 border-t border-gray-100 pl-2">
+                                <span className="font-black text-cafe-dark text-xl">{formatarMoeda(v.total)}</span>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* VIEW DESKTOP: TABELA DE VENDAS COM ORDENAÇÃO */}
+            <div className="hidden md:block bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden z-10 relative">
                 <table className="w-full text-left text-sm select-none">
-                    <thead className="bg-gray-100 text-gray-600 border-b">
+                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 text-xs uppercase tracking-wider">
                         <tr>
                             <th
-                                className="p-4 font-bold cursor-pointer hover:bg-gray-200 transition-colors"
+                                className="p-4 font-bold cursor-pointer hover:bg-gray-100 transition-colors"
                                 onClick={() => alternarOrdenacao('data_venda')}
                             >
                                 <div className="flex items-center">Data / Hora {renderizarIconeOrdenacao('data_venda')}</div>
                             </th>
                             <th
-                                className="p-4 font-bold cursor-pointer hover:bg-gray-200 transition-colors"
+                                className="p-4 font-bold cursor-pointer hover:bg-gray-100 transition-colors"
                                 onClick={() => alternarOrdenacao('id')}
                             >
                                 <div className="flex items-center">Nº Venda {renderizarIconeOrdenacao('id')}</div>
                             </th>
                             <th
-                                className="p-4 font-bold cursor-pointer hover:bg-gray-200 transition-colors text-center"
+                                className="p-4 font-bold cursor-pointer hover:bg-gray-100 transition-colors text-center"
                                 onClick={() => alternarOrdenacao('metodo_pagamento')}
                             >
                                 <div className="flex items-center justify-center">Método Principal {renderizarIconeOrdenacao('metodo_pagamento')}</div>
                             </th>
                             <th
-                                className="p-4 font-bold cursor-pointer hover:bg-gray-200 transition-colors text-right"
+                                className="p-4 font-bold cursor-pointer hover:bg-gray-100 transition-colors text-right"
                                 onClick={() => alternarOrdenacao('total')}
                             >
                                 <div className="flex items-center justify-end">Valor Total {renderizarIconeOrdenacao('total')}</div>
@@ -366,20 +393,20 @@ export default function RelatorioVendasModulo() {
                     </thead>
                     <tbody>
                         {carregando ? (
-                            <tr><td colSpan={4} className="p-8 text-center text-gray-500 font-bold animate-pulse">Buscando e ordenando registros...</td></tr>
+                            <tr><td colSpan={4} className="p-8 text-center text-cafe-primary font-bold animate-pulse uppercase tracking-widest text-xs">Buscando e ordenando registros...</td></tr>
                         ) : vendas.length === 0 ? (
-                            <tr><td colSpan={4} className="p-8 text-center text-gray-500 italic">Nenhuma venda encontrada neste período.</td></tr>
+                            <tr><td colSpan={4} className="p-10 text-center text-gray-400 italic">Nenhuma venda encontrada neste período.</td></tr>
                         ) : (
                             vendas.map(v => (
-                                <tr key={v.id} onClick={() => abrirDetalhes(v)} className="border-b hover:bg-blue-50/50 cursor-pointer transition group">
-                                    <td className="p-4 font-semibold text-gray-700">{formatarDataHora(v.data_venda)}</td>
-                                    <td className="p-4 text-xs font-mono text-gray-400">#{v.id.split('-')[0]}</td>
+                                <tr key={v.id} onClick={() => abrirDetalhes(v)} className="border-b border-gray-100 hover:bg-cafe-bg/50 cursor-pointer transition-colors group">
+                                    <td className="p-4 font-bold text-gray-800">{formatarDataHora(v.data_venda)}</td>
+                                    <td className="p-4 text-xs font-mono text-gray-500 font-semibold uppercase">#{v.id.split('-')[0]}</td>
                                     <td className="p-4 text-center">
-                                        <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-bold border">
+                                        <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider border border-gray-200">
                                             {v.metodo_pagamento?.toUpperCase() || 'MISTO'}
                                         </span>
                                     </td>
-                                    <td className="p-4 font-black text-gray-800 text-right">{formatarMoeda(v.total)}</td>
+                                    <td className="p-4 font-black text-cafe-dark text-right text-base">{formatarMoeda(v.total)}</td>
                                 </tr>
                             ))
                         )}
@@ -389,14 +416,14 @@ export default function RelatorioVendasModulo() {
 
             {/* CONTROLES DE PAGINAÇÃO AVANÇADA */}
             {!carregando && totalRegistros > 0 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center mt-4 px-2 z-10 relative gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 px-2 z-10 relative gap-4">
 
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-500">Itens por página:</span>
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-center sm:justify-start">
+                        <span className="text-[10px] md:text-xs font-bold text-gray-500 uppercase tracking-widest">Itens por página:</span>
                         <select
                             value={itensPorPagina}
                             onChange={(e) => setItensPorPagina(Number(e.target.value))}
-                            className="bg-white border border-gray-300 rounded px-2 py-1 text-xs font-bold text-gray-700 outline-none hover:border-gray-400 cursor-pointer transition"
+                            className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-base md:text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-cafe-primary cursor-pointer transition shadow-sm"
                         >
                             <option value={15}>15</option>
                             <option value={30}>30</option>
@@ -405,15 +432,15 @@ export default function RelatorioVendasModulo() {
                         </select>
                     </div>
 
-                    <span className="text-xs font-semibold text-gray-500 text-center">
-                        Mostrando {(paginaAtual - 1) * itensPorPagina + 1} a {Math.min(paginaAtual * itensPorPagina, totalRegistros)} de {totalRegistros} vendas
+                    <span className="text-[10px] md:text-xs font-bold text-gray-500 uppercase tracking-widest text-center">
+                        Mostrando <span className="text-cafe-dark">{((paginaAtual - 1) * itensPorPagina) + 1}</span> a <span className="text-cafe-dark">{Math.min(paginaAtual * itensPorPagina, totalRegistros)}</span> de <span className="text-cafe-dark">{totalRegistros}</span> vendas
                     </span>
 
-                    <div className="flex gap-1">
+                    <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-end">
                         <button
                             disabled={paginaAtual === 1}
                             onClick={() => buscarVendas(1)}
-                            className="px-3 py-1 bg-white border rounded font-bold text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-black text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition active:scale-95"
                             title="Primeira Página"
                         >
                             «
@@ -421,24 +448,24 @@ export default function RelatorioVendasModulo() {
                         <button
                             disabled={paginaAtual === 1}
                             onClick={() => buscarVendas(paginaAtual - 1)}
-                            className="px-3 py-1 bg-white border rounded font-bold text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-bold text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition active:scale-95"
                         >
-                            Anterior
+                            Ant
                         </button>
-                        <span className="px-3 py-1 font-bold text-sm text-gray-700 bg-gray-100 rounded">
-                            {paginaAtual} / {totalPaginas || 1}
+                        <span className="px-4 py-2 font-black text-sm text-cafe-primary bg-cafe-bg rounded-lg border border-cafe-secondary/30">
+                            {paginaAtual} <span className="text-gray-400 font-medium">/</span> {totalPaginas || 1}
                         </span>
                         <button
                             disabled={paginaAtual >= totalPaginas}
                             onClick={() => buscarVendas(paginaAtual + 1)}
-                            className="px-3 py-1 bg-white border rounded font-bold text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-bold text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition active:scale-95"
                         >
-                            Próxima
+                            Próx
                         </button>
                         <button
                             disabled={paginaAtual >= totalPaginas}
                             onClick={() => buscarVendas(totalPaginas)}
-                            className="px-3 py-1 bg-white border rounded font-bold text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-black text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition active:scale-95"
                             title="Última Página"
                         >
                             »
@@ -449,78 +476,95 @@ export default function RelatorioVendasModulo() {
 
             {/* MODAL DE DETALHES DA VENDA */}
             {vendaSelecionada && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-2 md:p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] md:max-h-[90vh] border border-gray-200">
 
                         {/* Header Modal */}
-                        <div className="bg-gray-900 p-5 flex justify-between items-center text-white">
+                        <div className="bg-gray-900 p-4 md:p-5 flex justify-between items-center text-white shrink-0">
                             <div>
-                                <h3 className="font-black text-lg">Detalhes da Venda</h3>
-                                <p className="text-xs text-gray-400 font-mono">ID: {vendaSelecionada.id}</p>
+                                <h3 className="font-black text-lg md:text-xl tracking-tight">Detalhes da Transação</h3>
+                                <p className="text-[10px] md:text-xs text-gray-400 font-mono uppercase tracking-widest mt-1">ID: {vendaSelecionada.id}</p>
                             </div>
-                            <button onClick={() => setVendaSelecionada(null)} className="text-gray-400 hover:text-white font-black text-xl px-2">✕</button>
+                            <button onClick={() => setVendaSelecionada(null)} className="text-gray-400 hover:text-white font-black text-2xl px-2 transition">✕</button>
                         </div>
 
                         {/* Corpo Modal */}
-                        <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+                        <div className="p-4 md:p-6 overflow-y-auto flex-1 bg-gray-50/50 custom-scrollbar">
 
-                            <div className="flex justify-between items-start mb-6 bg-white p-4 rounded-lg border shadow-sm">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
+                                <div className="absolute left-0 top-0 w-1.5 h-full bg-cafe-primary"></div>
                                 <div>
-                                    <p className="text-xs font-bold text-gray-400 uppercase">Data e Hora</p>
-                                    <p className="font-bold text-gray-800">{formatarDataHora(vendaSelecionada.data_venda)}</p>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Data e Hora de Fechamento</p>
+                                    <p className="font-bold text-gray-800 text-sm md:text-base">{formatarDataHora(vendaSelecionada.data_venda)}</p>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-xs font-bold text-gray-400 uppercase">Valor Total</p>
-                                    <p className="text-xl font-black text-green-600">{formatarMoeda(vendaSelecionada.total)}</p>
+                                <div className="text-left sm:text-right w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Valor Total da Compra</p>
+                                    <p className="text-2xl font-black text-cafe-dark leading-none">{formatarMoeda(vendaSelecionada.total)}</p>
                                 </div>
                             </div>
 
-                            <h4 className="font-black text-gray-700 border-b pb-2 mb-3 text-sm uppercase">Itens Vendidos</h4>
+                            <h4 className="font-black text-gray-800 border-b border-gray-200 pb-2 mb-4 text-xs uppercase tracking-wider">Itens Consumidos</h4>
 
                             {carregandoItens ? (
-                                <p className="text-center text-sm font-bold text-gray-500 py-6 animate-pulse">Carregando itens...</p>
+                                <p className="text-center text-xs font-bold text-gray-500 py-10 animate-pulse uppercase tracking-widest">Extraindo itens do pedido...</p>
                             ) : (
-                                <div className="bg-white border rounded-lg overflow-hidden shadow-sm mb-6">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-100">
-                                            <tr>
-                                                <th className="p-3 font-bold text-gray-600">Produto</th>
-                                                <th className="p-3 font-bold text-center text-gray-600">Qtd</th>
-                                                <th className="p-3 font-bold text-right text-gray-600">Unitário</th>
-                                                <th className="p-3 font-bold text-right text-gray-600">Subtotal</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {itensVenda.map(item => (
-                                                <tr key={item.id} className="border-t">
-                                                    <td className="p-3 font-semibold text-gray-800">{item.produtos?.nome || 'Produto não encontrado'}</td>
-                                                    <td className="p-3 text-center font-bold text-gray-600">{item.quantidade}</td>
-                                                    <td className="p-3 text-right text-gray-500">{formatarMoeda(item.preco_unitario)}</td>
-                                                    <td className="p-3 text-right font-bold text-gray-800">{formatarMoeda(item.subtotal)}</td>
+                                <>
+                                    {/* View Itens Mobile */}
+                                    <div className="md:hidden space-y-3 mb-6">
+                                        {itensVenda.map(item => (
+                                            <div key={item.id} className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm flex flex-col gap-2">
+                                                <span className="font-black text-gray-800 leading-tight">{item.produtos?.nome || 'Produto não encontrado'}</span>
+                                                <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-100 mt-1">
+                                                    <span className="text-gray-500 font-bold bg-gray-50 px-2 py-1 rounded text-xs border border-gray-100">{item.quantidade}x {formatarMoeda(item.preco_unitario)}</span>
+                                                    <span className="font-black text-cafe-dark">{formatarMoeda(item.subtotal)}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* View Itens Desktop */}
+                                    <div className="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm mb-6">
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                                                <tr>
+                                                    <th className="p-3 font-bold">Produto</th>
+                                                    <th className="p-3 font-bold text-center">Qtd</th>
+                                                    <th className="p-3 font-bold text-right">Unitário</th>
+                                                    <th className="p-3 font-bold text-right">Subtotal</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {itensVenda.map(item => (
+                                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="p-3 font-bold text-gray-800">{item.produtos?.nome || 'Produto Removido'}</td>
+                                                        <td className="p-3 text-center font-black text-gray-600 bg-gray-50/50">{item.quantidade}</td>
+                                                        <td className="p-3 text-right text-gray-500 font-semibold">{formatarMoeda(item.preco_unitario)}</td>
+                                                        <td className="p-3 text-right font-black text-cafe-dark">{formatarMoeda(item.subtotal)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
                             )}
 
-                            <h4 className="font-black text-gray-700 border-b pb-2 mb-3 text-sm uppercase">Composição de Pagamento</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-white border p-3 rounded shadow-sm flex justify-between">
-                                    <span className="text-sm font-bold text-gray-500">💵 Dinheiro:</span>
-                                    <span className="font-bold">{formatarMoeda(vendaSelecionada.valor_dinheiro)}</span>
+                            <h4 className="font-black text-gray-800 border-b border-gray-200 pb-2 mb-4 text-xs uppercase tracking-wider">Composição do Pagamento</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                                <div className="bg-green-50/50 border border-green-100 p-3.5 rounded-xl shadow-sm flex justify-between items-center">
+                                    <span className="text-[10px] md:text-xs font-black text-green-700 uppercase tracking-widest">💵 Dinheiro</span>
+                                    <span className="font-black text-green-800 text-sm md:text-base">{formatarMoeda(vendaSelecionada.valor_dinheiro)}</span>
                                 </div>
-                                <div className="bg-white border p-3 rounded shadow-sm flex justify-between">
-                                    <span className="text-sm font-bold text-gray-500">📱 PIX:</span>
-                                    <span className="font-bold">{formatarMoeda(vendaSelecionada.valor_pix)}</span>
+                                <div className="bg-blue-50/50 border border-blue-100 p-3.5 rounded-xl shadow-sm flex justify-between items-center">
+                                    <span className="text-[10px] md:text-xs font-black text-blue-700 uppercase tracking-widest">📱 PIX</span>
+                                    <span className="font-black text-blue-800 text-sm md:text-base">{formatarMoeda(vendaSelecionada.valor_pix)}</span>
                                 </div>
-                                <div className="bg-white border p-3 rounded shadow-sm flex justify-between">
-                                    <span className="text-sm font-bold text-gray-500">💳 Crédito:</span>
-                                    <span className="font-bold">{formatarMoeda(vendaSelecionada.valor_cartao_credito)}</span>
+                                <div className="bg-white border border-gray-200 p-3.5 rounded-xl shadow-sm flex justify-between items-center">
+                                    <span className="text-[10px] md:text-xs font-black text-gray-500 uppercase tracking-widest">💳 C. Crédito</span>
+                                    <span className="font-black text-gray-800 text-sm md:text-base">{formatarMoeda(vendaSelecionada.valor_cartao_credito)}</span>
                                 </div>
-                                <div className="bg-white border p-3 rounded shadow-sm flex justify-between">
-                                    <span className="text-sm font-bold text-gray-500">💳 Débito:</span>
-                                    <span className="font-bold">{formatarMoeda(vendaSelecionada.valor_cartao_debito)}</span>
+                                <div className="bg-white border border-gray-200 p-3.5 rounded-xl shadow-sm flex justify-between items-center">
+                                    <span className="text-[10px] md:text-xs font-black text-gray-500 uppercase tracking-widest">💳 C. Débito</span>
+                                    <span className="font-black text-gray-800 text-sm md:text-base">{formatarMoeda(vendaSelecionada.valor_cartao_debito)}</span>
                                 </div>
                             </div>
                         </div>

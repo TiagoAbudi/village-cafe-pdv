@@ -31,7 +31,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
     const [modoPagamento, setModoPagamento] = useState<'unico' | 'misto'>('unico');
     const [metodoUnico, setMetodoUnico] = useState('PIX');
     const [valorRecebidoDinheiro, setValorRecebidoDinheiro] = useState<number | ''>('');
-    const [desconto, setDesconto] = useState<number | ''>(''); // NOVO: Desconto da Comanda
+    const [desconto, setDesconto] = useState<number | ''>('');
 
     const [pagamentosMistos, setPagamentosMistos] = useState<PagamentoMisto[]>([
         { metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }
@@ -158,13 +158,12 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
     // ---------- FUNÇÕES DE CHECKOUT ----------
 
-    // ATUALIZADO: Cálculos agora consideram o desconto
     const subtotalComandaAberta = useMemo(() => {
         return comandaAberta?.itens_comanda.reduce((acc, item) => acc + (item.preco_unitario * item.quantidade), 0) || 0;
     }, [comandaAberta]);
 
     const valorDesconto = Number(desconto) || 0;
-    const totalComDesconto = Math.max(0, subtotalComandaAberta - valorDesconto); // Total final a pagar
+    const totalComDesconto = Math.max(0, subtotalComandaAberta - valorDesconto);
 
     const totalPagoMisto = pagamentosMistos.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
     const faltaPagarMisto = modoPagamento === 'misto' && totalPagoMisto < totalComDesconto ? totalComDesconto - totalPagoMisto : 0;
@@ -194,7 +193,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         setModoPagamento('unico');
         setMetodoUnico('PIX');
         setValorRecebidoDinheiro('');
-        setDesconto(''); // Reseta desconto ao abrir checkout
+        setDesconto('');
         setPagamentosMistos([{ metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }]);
         setModalCheckout(true);
     };
@@ -231,11 +230,10 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         }
 
         try {
-            // ATUALIZADO: Gravando a venda com o total final (com desconto) e a coluna de desconto
             const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{
                 identificacao_pedido: `Comanda: ${comandaAberta.identificacao}`,
                 total: totalComDesconto,
-                desconto: valorDesconto, // Gravando desconto
+                desconto: valorDesconto,
                 metodo_pagamento: metodosStr,
                 valor_pix: vPix,
                 valor_dinheiro: vDin,
@@ -289,8 +287,8 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
     if (caixaAberto === false) return (<div className="max-w-md mx-auto bg-white rounded-lg shadow-lg border border-red-200 text-center my-20 p-8"><div className="text-6xl mb-6">🔒</div><h2 className="text-2xl font-bold text-red-600">Caixa Fechado</h2><p className="text-gray-500 mt-2">Abra o caixa no Dashboard para gerir comandas.</p></div>);
 
     return (
-        <div className="max-w-6xl mx-auto p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-8 relative">
-            {feedback.tipo && (<div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : feedback.tipo === 'erro' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}><span className="font-semibold">{feedback.msg}</span></div>)}
+        <div className="max-w-6xl mx-auto p-4 md:p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-4 md:my-8 relative">
+            {feedback.tipo && (<div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : feedback.tipo === 'erro' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}><span className="font-semibold">{feedback.msg}</span></div>)}
 
             {/* Modal Nova Comanda */}
             {modalNova && (
@@ -298,12 +296,12 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                     <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
                         <h3 className="text-xl font-bold text-cafe-dark mb-4 border-b pb-2">Abrir Nova Comanda</h3>
                         <div className="space-y-4 mb-6">
-                            <div><label className="block text-sm font-semibold mb-1">Identificação (Mesa/Cartão)</label><input type="text" placeholder="Ex: Mesa 04" className="w-full p-2 border rounded outline-none" value={novaIdentificacao} onChange={e => setNovaIdentificacao(e.target.value)} autoFocus /></div>
-                            <div><label className="block text-sm font-semibold mb-1">Nome do Cliente (Opcional)</label><input type="text" placeholder="Ex: João Silva" className="w-full p-2 border rounded outline-none" value={novoCliente} onChange={e => setNovoCliente(e.target.value)} /></div>
+                            <div><label className="block text-sm font-semibold mb-1">Identificação (Mesa/Cartão)</label><input type="text" placeholder="Ex: Mesa 04" className="w-full p-3 md:p-2 border rounded outline-none text-base" value={novaIdentificacao} onChange={e => setNovaIdentificacao(e.target.value)} autoFocus /></div>
+                            <div><label className="block text-sm font-semibold mb-1">Nome do Cliente (Opcional)</label><input type="text" placeholder="Ex: João Silva" className="w-full p-3 md:p-2 border rounded outline-none text-base" value={novoCliente} onChange={e => setNovoCliente(e.target.value)} /></div>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={() => setModalNova(false)} className="flex-1 bg-gray-100 py-2 rounded font-semibold transition hover:bg-gray-200">Cancelar</button>
-                            <button onClick={criarComanda} className="flex-1 bg-cafe-primary text-white py-2 rounded font-semibold transition shadow hover:bg-cafe-dark">Abrir Comanda</button>
+                            <button onClick={() => setModalNova(false)} className="flex-1 bg-gray-100 py-3 md:py-2 rounded font-semibold transition hover:bg-gray-200">Cancelar</button>
+                            <button onClick={criarComanda} className="flex-1 bg-cafe-primary text-white py-3 md:py-2 rounded font-semibold transition shadow hover:bg-cafe-dark">Abrir Comanda</button>
                         </div>
                     </div>
                 </div>
@@ -311,81 +309,105 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
             {/* Modal Gestão da Comanda (Adicionar Itens) */}
             {comandaAberta && !modalCheckout && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4">
+                    {/* Alterado para flex-col e h-[95vh] para gerenciar altura dinamicamente */}
                     <div className="bg-white rounded-lg shadow-2xl p-4 md:p-6 w-full max-w-4xl h-[95vh] flex flex-col">
-                        <div className="flex justify-between items-center mb-4 border-b pb-3">
+
+                        {/* Header Modal */}
+                        <div className="flex justify-between items-center mb-2 border-b pb-2">
                             <div>
                                 <h3 className="text-2xl font-black text-cafe-primary">{comandaAberta.identificacao}</h3>
                                 <span className="text-sm text-gray-500 font-semibold">Cliente: {comandaAberta.nome_cliente}</span>
                             </div>
-                            <button onClick={() => setComandaAberta(null)} className="text-gray-400 hover:text-red-500 font-bold text-xl">X</button>
+                            <button onClick={() => setComandaAberta(null)} className="text-gray-400 hover:text-red-500 font-bold text-2xl px-2">✕</button>
                         </div>
 
-                        <div className="mb-6">
+                        {/* Top Section: Produtos Disponíveis (Flex-1 para dividir tela) */}
+                        <div className="flex flex-col min-h-[35%] flex-1 border-b pb-2 mb-2">
                             <input
                                 type="text"
                                 placeholder="🔍 Buscar produto..."
                                 value={buscaProduto}
                                 onChange={(e) => setBuscaProduto(e.target.value)}
-                                className="w-full p-3 border rounded-lg mb-3 outline-none focus:ring-2 focus:ring-cafe-primary"
+                                className="w-full p-3 border rounded-lg mb-2 outline-none focus:ring-2 focus:ring-cafe-primary text-base flex-shrink-0 bg-gray-50"
                             />
-                            <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                            {/* Scroll da lista de produtos */}
+                            <div className="space-y-2 overflow-y-auto flex-1 pr-1">
                                 {produtosFiltrados.map(produto => {
                                     const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
                                     const estoqueBaixo = !produto.is_receita && produto.quantidade_estoque > 0 && produto.quantidade_estoque <= 5;
                                     return (
-                                        <div key={produto.id} className="bg-white border rounded-lg p-3 flex items-center justify-between hover:shadow-sm transition">
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="font-semibold truncate text-sm">{produto.nome}</h4>
+                                        <div key={produto.id} className="bg-white border rounded-lg p-2 md:p-3 flex items-center justify-between hover:shadow-sm transition">
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <h4 className="font-semibold truncate text-sm md:text-base">{produto.nome}</h4>
                                                 <div className="flex flex-wrap items-center gap-2 mt-1">
                                                     <span className="font-bold text-cafe-primary text-sm">{formatarMoeda(produto.preco_venda)}</span>
                                                     {!produto.is_receita && (
                                                         <>
-                                                            {semEstoque && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold">🔴 Sem estoque</span>}
-                                                            {estoqueBaixo && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">🟡 {produto.quantidade_estoque} un</span>}
-                                                            {!semEstoque && !estoqueBaixo && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">🟢 {produto.quantidade_estoque} un</span>}
+                                                            {semEstoque && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">🔴 Sem estoque</span>}
+                                                            {estoqueBaixo && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-bold">🟡 {produto.quantidade_estoque} un</span>}
+                                                            {!semEstoque && !estoqueBaixo && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">🟢 {produto.quantidade_estoque} un</span>}
                                                         </>
                                                     )}
                                                 </div>
                                             </div>
-                                            <button onClick={() => adicionarItem(produto)} disabled={semEstoque} className={`ml-3 w-10 h-10 rounded-full font-bold text-xl flex items-center justify-center transition ${semEstoque ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-cafe-primary text-white hover:opacity-90 active:scale-95'}`}>+</button>
+                                            {/* Touch Target maior no celular */}
+                                            <button onClick={() => adicionarItem(produto)} disabled={semEstoque} className={`flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full font-bold text-xl flex items-center justify-center transition shadow-sm ${semEstoque ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-cafe-primary text-white hover:bg-cafe-dark active:scale-95'}`}>+</button>
                                         </div>
                                     );
                                 })}
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto mb-4 border rounded p-2 bg-gray-50 min-h-[200px]">
-                            {comandaAberta.itens_comanda.length === 0 ? (
-                                <p className="text-center text-gray-400 italic mt-10">Nenhum item lançado ainda.</p>
-                            ) : (
-                                <ul className="space-y-3">
-                                    {comandaAberta.itens_comanda.map(item => (
-                                        <li key={item.id} className="bg-white border rounded-lg p-3 shadow-sm flex justify-between items-center">
-                                            <div className="flex-1">
-                                                <div className="font-semibold">{item.produtos?.nome}</div>
-                                                <div className="text-xs text-gray-500">{formatarMoeda(item.preco_unitario)} cada</div>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, -1)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 font-bold">-</button>
-                                                <span className="font-bold w-6 text-center">{item.quantidade}</span>
-                                                <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, 1)} className="w-8 h-8 rounded-full bg-cafe-primary text-white hover:opacity-90 font-bold">+</button>
-                                                <div className="w-24 text-right font-black">{formatarMoeda(item.quantidade * item.preco_unitario)}</div>
-                                                <button onClick={() => removerItem(item.id)} className="text-red-500 hover:text-red-700 font-bold">🗑️</button>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                        {/* Bottom Section: Itens na Comanda (Flex-1 para dividir tela) */}
+                        <div className="flex flex-col min-h-[30%] flex-1 bg-gray-50 border rounded p-2">
+                            <h4 className="text-sm font-bold text-gray-500 mb-2 uppercase tracking-wide">Itens Lançados</h4>
+                            <div className="flex-1 overflow-y-auto">
+                                {comandaAberta.itens_comanda.length === 0 ? (
+                                    <p className="text-center text-gray-400 italic mt-6">Nenhum item lançado ainda.</p>
+                                ) : (
+                                    <ul className="space-y-3 pr-1">
+                                        {comandaAberta.itens_comanda.map(item => (
+                                            // Layout flex responsivo: coluna no celular apertado, linha no PC
+                                            <li key={item.id} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                <div className="flex-1">
+                                                    <div className="font-semibold text-sm md:text-base">{item.produtos?.nome}</div>
+                                                    <div className="text-xs text-gray-500">{formatarMoeda(item.preco_unitario)} cada</div>
+                                                </div>
+
+                                                {/* Controles de Quantidade adaptados */}
+                                                <div className="flex items-center gap-1 sm:gap-2 bg-gray-50 border rounded-lg p-1 w-full sm:w-auto justify-between sm:justify-start">
+                                                    <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, -1)} className="w-10 h-10 sm:w-8 sm:h-8 rounded bg-white shadow-sm border hover:bg-gray-100 font-bold active:bg-gray-200">-</button>
+                                                    <span className="font-bold w-6 text-center">{item.quantidade}</span>
+                                                    <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, 1)} className="w-10 h-10 sm:w-8 sm:h-8 rounded bg-cafe-primary text-white shadow-sm hover:opacity-90 font-bold active:bg-cafe-dark">+</button>
+
+                                                    <div className="w-px h-6 bg-gray-300 mx-1 hidden sm:block"></div>
+
+                                                    <div className="w-20 sm:w-24 text-right font-black text-sm md:text-base">{formatarMoeda(item.quantidade * item.preco_unitario)}</div>
+
+                                                    <button onClick={() => removerItem(item.id)} className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition">🗑️</button>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="border-t pt-4 flex justify-between items-center bg-white">
-                            <button onClick={confirmarExclusao} className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded transition">Excluir Comanda</button>
-                            <div className="text-right">
+                        {/* Footer Ações */}
+                        <div className="pt-4 flex flex-col md:flex-row justify-between items-center gap-4 mt-2">
+                            <button onClick={confirmarExclusao} className="w-full md:w-auto text-red-500 font-bold hover:bg-red-50 px-4 py-3 md:py-2 rounded transition order-3 md:order-1 border md:border-none border-red-200">
+                                Excluir Comanda
+                            </button>
+
+                            <div className="text-center md:text-right w-full md:w-auto order-1 md:order-2">
                                 <span className="block text-sm text-gray-500 font-semibold">Total Parcial</span>
                                 <span className="text-3xl font-black text-cafe-primary">{formatarMoeda(subtotalComandaAberta)}</span>
                             </div>
-                            <button onClick={abrirCheckout} className="bg-blue-600 text-white text-lg font-bold px-6 py-3 rounded shadow hover:bg-blue-700 active:scale-95 transition">Encerrar e Pagar</button>
+
+                            <button onClick={abrirCheckout} className="w-full md:w-auto bg-blue-600 text-white text-lg font-bold px-8 py-4 md:py-3 rounded-lg shadow hover:bg-blue-700 active:scale-95 transition order-2 md:order-3">
+                                Encerrar e Pagar
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -393,26 +415,25 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
             {/* Modal Checkout (Pagamento Avançado) */}
             {modalCheckout && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
-                    <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md border-t-8 border-blue-600">
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+                    <div className="bg-white rounded-lg shadow-2xl p-4 md:p-6 w-full max-w-md border-t-8 border-blue-600 max-h-[95vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4 border-b pb-2">
                             <h3 className="text-xl font-bold text-cafe-dark">Pagar: {comandaAberta?.identificacao}</h3>
-                            <button onClick={() => setModalCheckout(false)} className="text-gray-400 hover:text-red-500 font-bold">Voltar</button>
+                            <button onClick={() => setModalCheckout(false)} className="text-gray-400 hover:text-red-500 font-bold text-lg px-2">✕</button>
                         </div>
 
-                        {/* ATUALIZADO: Mostrando subtotal, campo de desconto e total final */}
-                        <div className="mb-4">
-                            <div className="flex justify-between items-center text-sm font-semibold text-gray-600 mb-2">
+                        <div className="mb-4 space-y-2">
+                            <div className="flex justify-between items-center text-sm font-semibold text-gray-600">
                                 <span>Subtotal da Comanda:</span>
                                 <span>{formatarMoeda(subtotalComandaAberta)}</span>
                             </div>
 
-                            <div className="flex justify-between items-center bg-red-50 p-2 rounded border border-red-100 mb-3">
+                            <div className="flex justify-between items-center bg-red-50 p-3 md:p-2 rounded border border-red-100">
                                 <span className="text-sm font-bold text-red-700">Desconto:</span>
                                 <input
                                     type="number"
                                     placeholder="R$ 0,00"
-                                    className="w-24 p-1.5 border border-red-200 rounded text-right font-bold text-red-700 outline-none focus:ring-1 focus:ring-red-400 bg-white"
+                                    className="w-28 p-2 border border-red-200 rounded text-right font-bold text-red-700 outline-none focus:ring-2 focus:ring-red-400 bg-white text-base"
                                     value={desconto}
                                     onChange={(e) => setDesconto(Number(e.target.value) >= 0 ? Number(e.target.value) : '')}
                                 />
@@ -425,22 +446,22 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                         </div>
 
                         <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
-                            <button onClick={() => setModoPagamento('unico')} className={`flex-1 text-sm py-2 font-bold rounded transition ${modoPagamento === 'unico' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Pagamento Único</button>
-                            <button onClick={() => setModoPagamento('misto')} className={`flex-1 text-sm py-2 font-bold rounded transition ${modoPagamento === 'misto' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Combinar Formas</button>
+                            <button onClick={() => setModoPagamento('unico')} className={`flex-1 text-sm py-3 md:py-2 font-bold rounded transition ${modoPagamento === 'unico' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Pagamento Único</button>
+                            <button onClick={() => setModoPagamento('misto')} className={`flex-1 text-sm py-3 md:py-2 font-bold rounded transition ${modoPagamento === 'misto' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Combinar Formas</button>
                         </div>
 
                         {modoPagamento === 'unico' && (
                             <div className="space-y-3 mb-6">
-                                <select className="w-full p-3 border border-gray-300 rounded font-bold outline-none focus:ring-2 focus:ring-blue-500" value={metodoUnico} onChange={(e) => setMetodoUnico(e.target.value)}>
+                                <select className="w-full p-3 border border-gray-300 rounded font-bold outline-none focus:ring-2 focus:ring-blue-500 text-base bg-white" value={metodoUnico} onChange={(e) => setMetodoUnico(e.target.value)}>
                                     <option value="PIX">PIX</option><option value="Cartão de Crédito">Cartão de Crédito</option><option value="Cartão de Débito">Cartão de Débito</option><option value="Dinheiro">Dinheiro</option>
                                 </select>
                                 {metodoUnico === 'Dinheiro' && (
                                     <div className="flex gap-2 items-center bg-gray-50 p-3 rounded border">
                                         <span className="text-sm font-bold text-gray-700">Valor Recebido:</span>
-                                        <input type="number" placeholder="Para calcular troco" className="flex-1 p-2 border rounded font-bold" value={valorRecebidoDinheiro} onChange={(e) => setValorRecebidoDinheiro(Number(e.target.value))} />
+                                        <input type="number" placeholder="Troco..." className="flex-1 p-2 border rounded font-bold text-base outline-none focus:ring-2 focus:ring-blue-300" value={valorRecebidoDinheiro} onChange={(e) => setValorRecebidoDinheiro(Number(e.target.value))} />
                                     </div>
                                 )}
-                                {trocoUnico > 0 && <div className="text-center font-black text-blue-600 text-xl py-2">Troco: {formatarMoeda(trocoUnico)}</div>}
+                                {trocoUnico > 0 && <div className="text-center font-black text-blue-600 text-xl py-3 bg-blue-50 rounded border border-blue-100">Troco: {formatarMoeda(trocoUnico)}</div>}
                             </div>
                         )}
 
@@ -448,37 +469,39 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             <div className="space-y-3 mb-6 border p-3 rounded-lg bg-gray-50">
                                 {pagamentosMistos.map((pm, index) => (
                                     <div key={index} className="flex gap-2">
-                                        <select className="flex-1 p-2 border rounded font-semibold text-sm" value={pm.metodo} onChange={(e) => { const n = [...pagamentosMistos]; n[index].metodo = e.target.value; setPagamentosMistos(n); }}>
+                                        <select className="flex-1 p-3 md:p-2 border rounded font-semibold text-sm bg-white outline-none focus:ring-2 focus:ring-blue-300" value={pm.metodo} onChange={(e) => { const n = [...pagamentosMistos]; n[index].metodo = e.target.value; setPagamentosMistos(n); }}>
                                             <option value="PIX">PIX</option><option value="Dinheiro">Dinheiro</option><option value="Cartão de Crédito">Crédito</option><option value="Cartão de Débito">Débito</option>
                                         </select>
-                                        <input type="number" placeholder="R$ Valor" className="flex-1 p-2 border rounded font-bold text-sm" value={pm.valor} onChange={(e) => { const n = [...pagamentosMistos]; n[index].valor = Number(e.target.value); setPagamentosMistos(n); }} />
-                                        {index > 0 && <button onClick={() => setPagamentosMistos(pagamentosMistos.filter((_, i) => i !== index))} className="text-red-500 font-black px-2 hover:bg-red-100 rounded">X</button>}
+                                        <input type="number" placeholder="R$" className="w-24 p-3 md:p-2 border rounded font-bold text-base outline-none focus:ring-2 focus:ring-blue-300" value={pm.valor} onChange={(e) => { const n = [...pagamentosMistos]; n[index].valor = Number(e.target.value); setPagamentosMistos(n); }} />
+                                        {index > 0 && <button onClick={() => setPagamentosMistos(pagamentosMistos.filter((_, i) => i !== index))} className="w-12 flex items-center justify-center text-red-500 font-black hover:bg-red-100 rounded border bg-white shadow-sm">X</button>}
                                     </div>
                                 ))}
-                                <button onClick={() => setPagamentosMistos([...pagamentosMistos, { metodo: 'Cartão de Crédito', valor: '' }])} className="w-full text-sm font-bold text-blue-600 hover:text-blue-800 py-1">+ Adicionar Forma de Pagamento</button>
+                                <button onClick={() => setPagamentosMistos([...pagamentosMistos, { metodo: 'Cartão de Crédito', valor: '' }])} className="w-full text-sm font-bold text-blue-600 hover:text-blue-800 py-3 bg-white border border-dashed rounded">+ Adicionar Forma</button>
 
-                                <div className="flex justify-between font-black mt-3 pt-3 border-t">
+                                <div className="flex justify-between font-black mt-3 pt-3 border-t border-gray-200">
                                     <span className={faltaPagarMisto > 0 ? 'text-red-500' : 'text-gray-500'}>Falta: {formatarMoeda(faltaPagarMisto)}</span>
                                     <span className={trocoMisto > 0 ? 'text-blue-600' : 'text-gray-500'}>Troco: {formatarMoeda(trocoMisto)}</span>
                                 </div>
                             </div>
                         )}
 
-                        <button onClick={finalizarVenda} className="w-full bg-green-600 text-white font-black text-xl py-4 rounded shadow-lg hover:bg-green-700 active:scale-95 transition">CONFIRMAR E FECHAR MESA</button>
+                        <button onClick={finalizarVenda} className="w-full bg-green-600 text-white font-black text-xl py-4 rounded-lg shadow-lg hover:bg-green-700 active:scale-95 transition">CONFIRMAR E FECHAR MESA</button>
                     </div>
                 </div>
             )}
 
             {/* TELA PRINCIPAL (GRID DAS COMANDAS) */}
-            <div className="flex justify-between items-center mb-6 border-b border-cafe-secondary/30 pb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-cafe-primary">Mesas e Comandas Ativas</h2>
+                    <h2 className="text-2xl font-bold text-cafe-primary">Mesas e Comandas</h2>
                     <p className="text-sm text-gray-500 font-semibold mt-1">Gira os pedidos em aberto antes do pagamento</p>
                 </div>
-                <button onClick={() => setModalNova(true)} className="bg-cafe-secondary text-cafe-dark px-6 py-3 rounded font-black shadow hover:bg-opacity-90 active:scale-95 transition">+ ABRIR COMANDA</button>
+                <button onClick={() => setModalNova(true)} className="w-full md:w-auto bg-cafe-secondary text-cafe-dark px-6 py-4 md:py-3 rounded font-black shadow hover:bg-opacity-90 active:scale-95 transition text-lg md:text-base">
+                    + ABRIR COMANDA
+                </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[400px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[400px]">
                 {comandas.map(comanda => {
                     const totalItens = comanda.itens_comanda.reduce((acc, i) => acc + i.quantidade, 0);
                     const totalValor = comanda.itens_comanda.reduce((acc, i) => acc + (i.quantidade * i.preco_unitario), 0);
@@ -500,10 +523,12 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                     <div className="col-span-full flex flex-col items-center justify-center p-12 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
                         <span className="text-4xl mb-3 opacity-50">🍽️</span>
                         <p className="text-gray-500 font-bold text-lg">Nenhuma comanda aberta</p>
-                        <p className="text-sm text-gray-400">O salão está vazio no momento.</p>
+                        <p className="text-sm text-gray-400 text-center">O salão está vazio no momento.</p>
                     </div>
                 )}
             </div>
+
+            {/* Modal Confirmação de Exclusão */}
             {confirmacao?.visivel && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4 animate-fade-in">
                     <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm text-center">
@@ -511,8 +536,8 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{confirmacao.titulo}</h3>
                         <p className="text-gray-600 mb-6 text-sm">{confirmacao.msg}</p>
                         <div className="flex gap-3">
-                            <button onClick={() => setConfirmacao(null)} className="flex-1 bg-gray-100 py-2 rounded font-bold hover:bg-gray-200">Cancelar</button>
-                            <button onClick={confirmacao.onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700">Sim, Excluir</button>
+                            <button onClick={() => setConfirmacao(null)} className="flex-1 bg-gray-100 py-3 md:py-2 rounded font-bold hover:bg-gray-200">Cancelar</button>
+                            <button onClick={confirmacao.onConfirm} className="flex-1 bg-red-600 text-white py-3 md:py-2 rounded font-bold hover:bg-red-700">Sim, Excluir</button>
                         </div>
                     </div>
                 </div>
