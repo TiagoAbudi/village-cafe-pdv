@@ -221,8 +221,8 @@ export default function DashboardModulo() {
   const formatarDataHoraCompleta = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   const totalPix = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_pix) || (v.metodo_pagamento === 'PIX' ? Number(v.total) : 0)), 0), [vendasHoje]);
-  const totalCartaoCred = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_credito) || 0) + (v.metodo_pagamento === 'Cartão de Crédito' ? Number(v.total) : 0), 0), [vendasHoje]);
-  const totalCartaoDeb = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_debito) || 0) + (v.metodo_pagamento === 'Cartão de Débito' ? Number(v.total) : 0), 0), [vendasHoje]);
+  const totalCartaoCred = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_credito) || (v.metodo_pagamento === 'Cartão de Crédito' ? Number(v.total) : 0)), 0), [vendasHoje]);
+  const totalCartaoDeb = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_cartao_debito) || (v.metodo_pagamento === 'Cartão de Débito' ? Number(v.total) : 0)), 0), [vendasHoje]);
   const totalDinheiro = useMemo(() => vendasHoje.reduce((acc, v: any) => acc + (Number(v.valor_dinheiro) || (v.metodo_pagamento === 'Dinheiro' ? Number(v.total) : 0)), 0), [vendasHoje]);
   const faturamentoTotal = useMemo(() => vendasHoje.reduce((acc, v) => acc + Number(v.total), 0), [vendasHoje]);
 
