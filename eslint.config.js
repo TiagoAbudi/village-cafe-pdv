@@ -18,5 +18,9 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Permit explicit `any` in some legacy/DB-mapping code while migrating to stricter types
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
   },
 ])

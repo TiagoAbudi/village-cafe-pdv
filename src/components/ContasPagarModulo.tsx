@@ -117,7 +117,7 @@ export default function ContasPagarModulo() {
         setCarregando(false);
     };
 
-    useEffect(() => { carregarDados(); }, []);
+    useEffect(() => { (async () => { await carregarDados(); })(); }, []);
 
     const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
     const formatarData = (dataIso: string) => {
@@ -375,6 +375,7 @@ export default function ContasPagarModulo() {
             setMotivoMovimento('');
             carregarDados();
         } catch (e) {
+            console.error(e);
             mostrarMensagem('Erro ao registrar movimentação no caixa.', 'erro');
         }
     };
@@ -388,6 +389,7 @@ export default function ContasPagarModulo() {
             setNovoSaldoBanco('');
             mostrarMensagem('Saldo bancário ajustado com sucesso!', 'sucesso');
         } catch (error) {
+            console.error(error);
             mostrarMensagem('Erro ao ajustar saldo do banco.', 'erro');
         }
     };
@@ -438,7 +440,7 @@ export default function ContasPagarModulo() {
             setDescricao(''); setValor(''); setDataVencimento(''); setFornecedorId('');
             setDiaVencimentoRecorrente(''); setIsRecorrente(false);
             carregarDados();
-        } catch (error) { mostrarMensagem('Erro ao processar lançamento.', 'erro'); }
+        } catch (error) { console.error(error); mostrarMensagem('Erro ao processar lançamento.', 'erro'); }
     };
 
     // FUNÇÕES DE EDIÇÃO DE CONTA
@@ -469,6 +471,7 @@ export default function ContasPagarModulo() {
             mostrarMensagem('Conta atualizada com sucesso!', 'sucesso');
             carregarDados();
         } catch (error) {
+            console.error(error);
             mostrarMensagem('Erro ao atualizar a conta.', 'erro');
         } finally {
             setContaParaEditar(null);
@@ -507,7 +510,7 @@ export default function ContasPagarModulo() {
 
             mostrarMensagem('Conta marcada como PAGA!', 'sucesso');
             carregarDados();
-        } catch (error) { mostrarMensagem('Erro ao pagar conta.', 'erro'); }
+        } catch (error) { console.error(error); mostrarMensagem('Erro ao pagar conta.', 'erro'); }
         finally { setContaParaPagar(null); setMetodoPagamentoBaixa('PIX'); }
     };
 
@@ -534,7 +537,7 @@ export default function ContasPagarModulo() {
             await supabase.from('contas_pagar').delete().eq('id', contaParaApagar.id);
             mostrarMensagem('Conta removida e saldo atualizado!', 'sucesso');
             carregarDados();
-        } catch (error) { mostrarMensagem('Erro ao excluir conta.', 'erro'); }
+        } catch (error) { console.error(error); mostrarMensagem('Erro ao excluir conta.', 'erro'); }
         finally { setContaParaApagar(null); }
     };
 
