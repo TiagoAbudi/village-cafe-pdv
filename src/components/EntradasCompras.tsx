@@ -79,7 +79,10 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
     if (movData) setMovimentacoes(movData as unknown as Movimentacao[]);
   };
 
-  useEffect(() => { carregarDados(); }, []);
+   
+  useEffect(() => {
+    carregarDados();
+  }, []);
 
   const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   const formatarData = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -98,7 +101,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
       const { error } = await supabase.from('fornecedores').update({ nome: nomeFornecedorEditado }).eq('id', fornecedorParaEditar.id);
       if (error) throw error;
       mostrarMensagem('Fornecedor atualizado com sucesso!', 'sucesso'); carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao atualizar fornecedor.', 'erro'); } finally { setFornecedorParaEditar(null); setNomeFornecedorEditado(''); }
+    } catch (err) { console.error(err); mostrarMensagem('Erro ao atualizar fornecedor.', 'erro'); } finally { setFornecedorParaEditar(null); setNomeFornecedorEditado(''); }
   };
 
   const confirmarApagarFornecedor = async () => {
@@ -109,7 +112,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
       if (error) throw error;
       mostrarMensagem('Fornecedor excluído com sucesso.', 'sucesso');
       if (fornecedorId === fornecedorParaApagar.id) setFornecedorId(''); carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao excluir fornecedor.', 'erro'); } finally { setFornecedorParaApagar(null); }
+    } catch (err) { console.error(err); mostrarMensagem('Erro ao excluir fornecedor.', 'erro'); } finally { setFornecedorParaApagar(null); }
   };
 
   const salvarNovoIngrediente = async () => {
@@ -128,7 +131,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
       const { error } = await supabase.from('produtos').update({ ativo: false }).eq('id', ingredienteParaApagar);
       if (error) throw error;
       mostrarMensagem('Ingrediente removido.', 'sucesso'); carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao excluir ingrediente.', 'erro'); } finally { setIngredienteParaApagar(null); }
+    } catch (err) { console.error(err); mostrarMensagem('Erro ao excluir ingrediente.', 'erro'); } finally { setIngredienteParaApagar(null); }
   };
 
   const registarEntrada = async () => {
@@ -168,7 +171,10 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
       setGerarContaPagar(false);
       setDataVencimento('');
       carregarDados();
-    } catch (error) { mostrarMensagem('Ocorreu um erro ao gravar a entrada.', 'erro'); }
+    } catch (err) { 
+      console.error(err); 
+      mostrarMensagem('Ocorreu um erro ao gravar a entrada.', 'erro'); 
+    }
   };
 
   const registarAjusteAuditoria = async () => {
@@ -177,14 +183,11 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
     const produtoAtual = todosProdutos.find(p => p.id === ajusteProdutoId);
     if (!produtoAtual) return;
 
-    let novoEstoque = 0;
     const isSaida = ajusteTipo.includes('Saída');
 
-    if (isSaida) {
-      novoEstoque = produtoAtual.quantidade_estoque - Number(ajusteQuantidade);
-    } else {
-      novoEstoque = produtoAtual.quantidade_estoque + Number(ajusteQuantidade);
-    }
+    const novoEstoque = isSaida 
+      ? produtoAtual.quantidade_estoque - Number(ajusteQuantidade)
+      : produtoAtual.quantidade_estoque + Number(ajusteQuantidade);
 
     try {
       const { error: erroUpdate } = await supabase.from('produtos').update({ quantidade_estoque: novoEstoque }).eq('id', ajusteProdutoId);

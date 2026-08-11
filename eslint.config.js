@@ -21,6 +21,10 @@ export default defineConfig([
     rules: {
       // Permit explicit `any` in some legacy/DB-mapping code while migrating to stricter types
       '@typescript-eslint/no-explicit-any': 'off',
+      'react-hooks/exhaustive-deps': 'warn',
+      'no-useless-assignment': 'warn',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
 ])

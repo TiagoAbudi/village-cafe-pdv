@@ -114,14 +114,12 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
     setFinalizando(true);
 
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
-    let metodosStr = '';
 
     if (modoPagamento === 'unico') {
       vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
       vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
       vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
       vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
-      metodosStr = metodoUnico;
     } else {
       let trocoRestante = trocoMisto;
       pagamentosMistos.forEach(p => {
@@ -137,8 +135,9 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
           vDin += val;
         }
       });
-      metodosStr = Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
     }
+
+    const metodosStr = modoPagamento === 'unico' ? metodoUnico : Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
 
     try {
       const identificacaoFinal = identificacaoPedido.trim() || 'Venda Balcão';

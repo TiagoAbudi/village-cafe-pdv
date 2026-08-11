@@ -80,10 +80,12 @@ export default function PrecificacaoModulo() {
         }
     };
 
+     
     useEffect(() => {
         carregarDados();
     }, []);
 
+     
     useEffect(() => {
         const produtoBase = ingredientesDisponiveis.find(p => p.id === ingredienteAtualId);
         if (produtoBase) {
