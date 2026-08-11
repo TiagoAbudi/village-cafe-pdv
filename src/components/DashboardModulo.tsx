@@ -40,7 +40,13 @@ export default function DashboardModulo() {
     setTimeout(() => setFeedback({ msg: '', tipo: null }), 4000);
   };
 
-  useEffect(() => { verificarStatusCaixa(); }, []);
+  const buscarVendasDoCaixa = async (dataAbertura: string, caixaId: string) => {
+    const { data: vendas } = await supabase.from('vendas').select(`*, itens_venda ( produto_id, quantidade, preco_unitario, produtos ( nome ) )`).gte('data_venda', dataAbertura).order('data_venda', { ascending: false });
+    if (vendas) setVendasHoje(vendas as unknown as Venda[]);
+
+    const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixaId);
+    if (movs) setMovimentacoesCaixa(movs);
+  };
 
   const verificarStatusCaixa = async () => {
     setCarregando(true);
@@ -54,13 +60,9 @@ export default function DashboardModulo() {
     setCarregando(false);
   };
 
-  const buscarVendasDoCaixa = async (dataAbertura: string, caixaId: string) => {
-    const { data: vendas } = await supabase.from('vendas').select(`*, itens_venda ( produto_id, quantidade, preco_unitario, produtos ( nome ) )`).gte('data_venda', dataAbertura).order('data_venda', { ascending: false });
-    if (vendas) setVendasHoje(vendas as unknown as Venda[]);
-
-    const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixaId);
-    if (movs) setMovimentacoesCaixa(movs);
-  };
+  // Intentional: verificarStatusCaixa is stable in this component and should only run on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { (async () => { await verificarStatusCaixa(); })(); }, []);
 
   const abrirCaixa = async () => {
     if (fundoTroco === '') return mostrarMensagem('Informe o fundo de troco inicial.', 'aviso');
@@ -112,7 +114,7 @@ export default function DashboardModulo() {
 
       mostrarMensagem('Venda cancelada e estoque restaurado.', 'sucesso');
       buscarVendasDoCaixa(caixaAtual.data_abertura, caixaAtual.id);
-    } catch (error) { mostrarMensagem('Erro ao cancelar a venda.', 'erro'); }
+    } catch (error) { console.error(error); mostrarMensagem('Erro ao cancelar a venda.', 'erro'); }
     finally { setVendaParaCancelar(null); }
   };
 
@@ -185,7 +187,7 @@ export default function DashboardModulo() {
         }
       }
 
-      let metodosUsados = [];
+      const metodosUsados = [];
       if (editPix) metodosUsados.push('PIX');
       if (editDinheiro) metodosUsados.push('Dinheiro');
       if (editCredito) metodosUsados.push('Cartão de Crédito');

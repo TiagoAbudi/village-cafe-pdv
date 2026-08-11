@@ -12,6 +12,10 @@ type Movimentacao = {
   atendente: string; created_at: string; produtos: { nome: string; unidade_medida: string };
 };
 
+// Tipagens mais explícitas para evitar uso de `any`
+type Fornecedor = { id: string; nome: string; [key: string]: unknown };
+type Caixa = { id: string; status: string; data_abertura?: string; [key: string]: unknown } | null;
+
 type ItemCarrinhoLote = {
   produtoId: string;
   nome: string;
@@ -30,8 +34,8 @@ interface CadastroRevendaProps {
 export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
-  const [fornecedores, setFornecedores] = useState<any[]>([]);
-  const [caixaAtivo, setCaixaAtivo] = useState<any | null>(null);
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [caixaAtivo, setCaixaAtivo] = useState<Caixa>(null);
   const [carregando, setCarregando] = useState(false);
 
   // Estados do Formulário de Cadastro
@@ -97,18 +101,22 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     const { data: fornData } = await supabase.from('fornecedores').select('*').order('nome');
     const { data: caixaData } = await supabase.from('controle_caixa').select('*').eq('status', 'aberto').order('data_abertura', { ascending: false }).limit(1).maybeSingle();
 
-    if (fornData) setFornecedores(fornData);
-    if (caixaData) setCaixaAtivo(caixaData);
+    if (fornData) setFornecedores(fornData as Fornecedor[]);
+    if (caixaData) setCaixaAtivo(caixaData as Caixa);
 
     if (prodData) {
       setProdutos(prodData.filter(p => !produtosComReceita.has(p.id)));
     }
     if (movData) {
-      setMovimentacoes((movData as any[]).filter(m => !produtosComReceita.has(m.produto_id)) as unknown as Movimentacao[]);
+      const movs = (movData as unknown as Array<Record<string, unknown>>).filter(m => {
+        const produtoId = typeof m['produto_id'] === 'string' ? (m['produto_id'] as string) : String(m['produto_id']);
+        return !produtosComReceita.has(produtoId);
+      }) as unknown as Movimentacao[];
+      setMovimentacoes(movs);
     }
   };
 
-  useEffect(() => { carregarDados(); }, []);
+  useEffect(() => { (async () => { await carregarDados(); })(); }, []);
 
   const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   const formatarData = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -136,7 +144,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       setNome(''); setPrecoCusto(''); setPrecoVenda(''); setQuantidadeEstoque('');
       setEstoqueMinimo(5); setTamanho(''); setUnidadeMedida('un');
       carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao cadastrar produto.', 'erro'); }
+    } catch (error) { console.error(error); mostrarMensagem('Erro ao cadastrar produto.', 'erro'); }
   };
 
   const confirmarApagarProduto = async () => {
@@ -145,7 +153,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       await supabase.from('produtos').update({ ativo: false }).eq('id', produtoParaApagar);
       mostrarMensagem('Produto inativado.', 'sucesso');
       carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao inativar.', 'erro'); } finally { setProdutoParaApagar(null); }
+    } catch (error) { console.error(error); mostrarMensagem('Erro ao inativar.', 'erro'); } finally { setProdutoParaApagar(null); }
   };
 
   const abrirModalEdicao = (produto: Produto) => {
@@ -172,7 +180,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       }]);
       mostrarMensagem(`Estoque atualizado!`, 'sucesso');
       carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao atualizar.', 'erro'); } finally {
+    } catch (error) { console.error(error); mostrarMensagem('Erro ao atualizar.', 'erro'); } finally {
       setProdutoParaAjuste(null); setAjusteQuantidade(''); setAjusteMotivo(''); setAjusteTipo('Entrada - Reposição');
     }
   };
@@ -190,7 +198,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     }, ...carrinhoLote]);
   };
 
-  const atualizarLote = (id: string, campo: keyof ItemCarrinhoLote, valor: any) => {
+  const atualizarLote = (id: string, campo: keyof ItemCarrinhoLote, valor: number | '') => {
     setCarrinhoLote(carrinhoLote.map(item => item.produtoId === id ? { ...item, [campo]: valor } : item));
   };
 
@@ -210,7 +218,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
     // Validação Financeira e Distribuição dos Pagamentos
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0, vTrans = 0, vPrazo = 0;
-    let metodosImediatos: string[] = [];
+    const metodosImediatos: string[] = [];
 
     if (modoPagamentoLote === 'unico') {
       if (metodoPagamentoLote === 'Conta a Pagar') {
@@ -335,7 +343,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       setModoPagamentoLote('unico'); setMetodoPagamentoLote('PIX'); setFornecedorLoteId(''); setDataVencimentoLote('');
       setPagamentosMistosLote([{ metodo: 'PIX', valor: '' }, { metodo: 'Conta a Pagar', valor: '' }]);
       carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao registrar entrada.', 'erro'); } finally { setCarregando(false); }
+    } catch (error) { console.error(error); mostrarMensagem('Erro ao registrar entrada.', 'erro'); } finally { setCarregando(false); }
   };
 
   const salvarEdicaoProduto = async () => {
@@ -346,7 +354,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         tamanho: editTamanho !== '' ? Number(editTamanho) : null, unidade_medida: editUnidadeMedida, estoque_minimo: Number(editEstoqueMinimo) || 5
       }).eq('id', produtoParaEditar.id);
       mostrarMensagem('Produto atualizado!', 'sucesso'); setProdutoParaEditar(null); carregarDados();
-    } catch (error) { mostrarMensagem('Erro ao atualizar.', 'erro'); }
+    } catch (error) { console.error(error); mostrarMensagem('Erro ao atualizar.', 'erro'); }
   };
 
   // Verifica se o campo de Data de Vencimento deve ser exibido
@@ -464,15 +472,15 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                         <div className="grid grid-cols-3 gap-2">
                           <div>
                             <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Qtd</label>
-                            <input type="number" min="1" value={item.qtd} onChange={e => atualizarLote(item.produtoId, 'qtd', e.target.value)} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50 text-center" />
+                            <input type="number" min="1" value={item.qtd} onChange={e => atualizarLote(item.produtoId, 'qtd', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50 text-center" />
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Custo (R$)</label>
-                            <input type="number" min="0" value={item.custoUnitario} onChange={e => atualizarLote(item.produtoId, 'custoUnitario', e.target.value)} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-700" />
+                            <input type="number" min="0" value={item.custoUnitario} onChange={e => atualizarLote(item.produtoId, 'custoUnitario', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-700" />
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Venda (R$)</label>
-                            <input type="number" min="0" value={item.precoVenda} onChange={e => atualizarLote(item.produtoId, 'precoVenda', e.target.value)} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-green-50 text-green-700" />
+                            <input type="number" min="0" value={item.precoVenda} onChange={e => atualizarLote(item.produtoId, 'precoVenda', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-green-50 text-green-700" />
                           </div>
                         </div>
                       </div>

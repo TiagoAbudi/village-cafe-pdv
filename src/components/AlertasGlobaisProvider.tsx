@@ -8,6 +8,8 @@ export default function AlertasGlobaisProvider() {
     const [alertas, setAlertas] = useState<AlertaItem[]>([]);
     const [oculto, setOculto] = useState(false);
 
+    const formatarMoeda = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
     useEffect(() => {
         const verificarVencimentosGerais = async () => {
             const { data: { session } } = await supabase.auth.getSession();
@@ -55,8 +57,6 @@ export default function AlertasGlobaisProvider() {
 
         verificarVencimentosGerais();
     }, []);
-
-    const formatarMoeda = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
     if (alertas.length === 0 || oculto) return null;
 

@@ -26,14 +26,22 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
   const [caixaAberto, setCaixaAberto] = useState<boolean | null>(null);
   const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
+  const [finalizando, setFinalizando] = useState(false);
 
   const [buscaProduto, setBuscaProduto] = useState('');
+  const [buscaDebounced, setBuscaDebounced] = useState(buscaProduto);
+
+  // Debounce da busca para reduzir chamadas e melhorar UX
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(buscaProduto), 300);
+    return () => clearTimeout(t);
+  }, [buscaProduto]);
 
   const produtosFiltrados = useMemo(() => {
     return produtos.filter(p =>
-      p.nome.toLowerCase().includes(buscaProduto.toLowerCase())
+      p.nome.toLowerCase().includes(buscaDebounced.toLowerCase())
     );
-  }, [produtos, buscaProduto]);
+  }, [produtos, buscaDebounced]);
 
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
     setFeedback({ msg, tipo });
@@ -103,15 +111,15 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
     if (carrinho.length === 0) return mostrarMensagem('Adicione produtos ao carrinho.', 'aviso');
     if (modoPagamento === 'misto' && totalPagoMisto < totalComDesconto) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
 
+    setFinalizando(true);
+
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
-    let metodosStr = '';
 
     if (modoPagamento === 'unico') {
       vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
       vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
       vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
       vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
-      metodosStr = metodoUnico;
     } else {
       let trocoRestante = trocoMisto;
       pagamentosMistos.forEach(p => {
@@ -127,8 +135,9 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
           vDin += val;
         }
       });
-      metodosStr = Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
     }
+
+    const metodosStr = modoPagamento === 'unico' ? metodoUnico : Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
 
     try {
       const identificacaoFinal = identificacaoPedido.trim() || 'Venda Balcão';
@@ -160,7 +169,12 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
       setPagamentosMistos([{ metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }]);
       carregarProdutos();
 
-    } catch (error) { console.error(error); mostrarMensagem('Erro ao finalizar venda.', 'erro'); }
+    } catch (error) {
+      console.error(error);
+      mostrarMensagem('Erro ao finalizar venda.', 'erro');
+    } finally {
+      setFinalizando(false);
+    }
   };
 
   if (caixaAberto === null) return <div className="text-center mt-20 animate-pulse font-bold text-cafe-primary">Verificando caixa...</div>;
@@ -339,8 +353,8 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
             </div>
           )}
 
-          <button onClick={finalizarVenda} className="w-full bg-green-600 text-white font-black text-lg py-4 rounded-lg shadow-lg hover:bg-green-700 active:scale-95 transition mt-2">
-            FINALIZAR VENDA
+          <button onClick={finalizarVenda} disabled={finalizando} className="w-full bg-green-600 text-white font-black text-lg py-4 rounded-lg shadow-lg hover:bg-green-700 active:scale-95 transition mt-2 disabled:opacity-70 disabled:cursor-not-allowed">
+            {finalizando ? 'PROCESSANDO...' : 'FINALIZAR VENDA'}
           </button>
         </div>
       </div>

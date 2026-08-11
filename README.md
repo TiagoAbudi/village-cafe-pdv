@@ -24,16 +24,12 @@ O projeto foi desenvolvido com foco em performance, organização de código e e
 ### Frontend
 - React
 - Vite
-- JavaScript
+- TypeScript
+- Tailwind CSS
 - HTML5
-- CSS3
 
-### Backend
-- Node.js
-- Express
-
-### Banco de Dados
-- Oracle Database
+### Backend / Persistência
+- Supabase (Auth + Postgres) — este repositório usa Supabase para autenticação e armazenamento de dados; não há um backend Express/Node incluído aqui.
 
 ### Outras Ferramentas
 - Git

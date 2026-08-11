@@ -80,9 +80,7 @@ export default function DashboardRendimentos() {
         }
     };
 
-    useEffect(() => {
-        carregarDadosDashboard();
-    }, [dataInicio, dataFim]);
+    useEffect(() => { (async () => { await carregarDadosDashboard(); })(); }, [dataInicio, dataFim]);
 
     const gerarDiasMes = (ano: number, mes: number) => {
         const primeiroDiaSemana = new Date(ano, mes, 1).getDay();

@@ -83,6 +83,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         if (!silencioso) setCarregando(false);
     };
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { carregarDados(); }, []);
 
     // ---------- FUNÇÕES DE COMANDA ----------
@@ -97,7 +98,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             mostrarMensagem('Comanda aberta com sucesso!', 'sucesso');
             setModalNova(false); setNovaIdentificacao(''); setNovoCliente('');
             carregarDados(true);
-        } catch (error) { mostrarMensagem('Erro ao abrir comanda.', 'erro'); }
+        } catch (err) { console.error(err); mostrarMensagem('Erro ao abrir comanda.', 'erro'); }
     };
 
     const adicionarItem = async (produto: Produto) => {
@@ -125,7 +126,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             const { data: comandaAtualizada } = await supabase.from('comandas').select('*, itens_comanda(*, produtos(nome))').eq('id', comandaAberta.id).single();
             if (comandaAtualizada) setComandaAberta(comandaAtualizada as unknown as Comanda);
             carregarDados(true);
-        } catch (error) { mostrarMensagem('Erro ao adicionar item.', 'erro'); }
+        } catch (err) { console.error(err); mostrarMensagem('Erro ao adicionar item.', 'erro'); }
     };
 
     const removerItem = async (itemId: string) => {
@@ -134,7 +135,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             const { data: comandaAtualizada } = await supabase.from('comandas').select('*, itens_comanda(*, produtos(nome))').eq('id', comandaAberta?.id).single();
             if (comandaAtualizada) setComandaAberta(comandaAtualizada as unknown as Comanda);
             carregarDados(true);
-        } catch (error) { mostrarMensagem('Erro ao remover item.', 'erro'); }
+        } catch (err) { console.error(err); mostrarMensagem('Erro ao remover item.', 'erro'); }
     };
 
     const alterarQuantidadeItem = async (itemId: string, quantidadeAtual: number, delta: number) => {
@@ -151,7 +152,8 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             if (comandaAtualizada) setComandaAberta(comandaAtualizada as unknown as Comanda);
             carregarDados(true);
 
-        } catch (error) {
+        } catch (err) {
+            console.error(err);
             mostrarMensagem('Erro ao alterar quantidade.', 'erro');
         }
     };
@@ -183,7 +185,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                     setComandaAberta(null);
                     setConfirmacao(null);
                     carregarDados(true);
-                } catch (error) { mostrarMensagem('Erro ao excluir.', 'erro'); }
+                } catch (err) { console.error(err); mostrarMensagem('Erro ao excluir.', 'erro'); }
             }
         });
     };
@@ -203,14 +205,12 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         if (modoPagamento === 'misto' && totalPagoMisto < totalComDesconto) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
 
         let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
-        let metodosStr = '';
 
         if (modoPagamento === 'unico') {
             vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
             vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
             vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
             vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
-            metodosStr = metodoUnico;
         } else {
             let trocoRestante = trocoMisto;
             pagamentosMistos.forEach(p => {
@@ -226,8 +226,9 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                     vDin += val;
                 }
             });
-            metodosStr = Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
         }
+
+        const metodosStr = modoPagamento === 'unico' ? metodoUnico : Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
 
         try {
             const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{

@@ -240,7 +240,7 @@ export default function RelatorioVendasModulo() {
         }
     };
 
-    // Recarrega quando os filtros, a ordenação ou os itens por página mudam
+     
     useEffect(() => {
         buscarVendas(1);
     }, [dataInicio, dataFim, ordenacao, itensPorPagina]);

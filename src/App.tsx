@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 import logo from './assets/logo.svg';
-
-import PrecificacaoModulo from './components/PrecificacaoModulo';
-import EntradasCompras from './components/EntradasCompras';
-import CadastroRevenda from './components/CadastroRevenda';
-import PDVModulo from './components/PDVModulo';
-import Login from './components/Login';
-import DashboardModulo from './components/DashboardModulo';
-import ContasPagarModulo from './components/ContasPagarModulo';
-import GestaoComandas from './components/GestaoComandas';
-import DashboardRendimentos from './components/DashboardRendimentos';
 import AlertasGlobaisProvider from './components/AlertasGlobaisProvider';
-import RelatorioVendasModulo from './components/RelatorioVendasModulo';
+import Login from './components/Login';
+
+const PrecificacaoModulo = lazy(() => import('./components/PrecificacaoModulo'));
+const EntradasCompras = lazy(() => import('./components/EntradasCompras'));
+const CadastroRevenda = lazy(() => import('./components/CadastroRevenda'));
+const PDVModulo = lazy(() => import('./components/PDVModulo'));
+const DashboardModulo = lazy(() => import('./components/DashboardModulo'));
+const ContasPagarModulo = lazy(() => import('./components/ContasPagarModulo'));
+const GestaoComandas = lazy(() => import('./components/GestaoComandas'));
+const DashboardRendimentos = lazy(() => import('./components/DashboardRendimentos'));
+const RelatorioVendasModulo = lazy(() => import('./components/RelatorioVendasModulo'));
 
 type Aba = 'dashboard' | 'pdv' | 'precificacao' | 'revenda' | 'entradas' | 'financeiro' | 'comandas' | 'rendimentos' | 'relatorio-vendas';
 
@@ -144,15 +144,17 @@ function App() {
 
       {/* ÁREA PRINCIPAL DO SISTEMA */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-2 md:px-4 py-4 md:py-6 overflow-x-hidden">
-        {abaAtiva === 'pdv' && <PDVModulo atendente={atendenteNome} />}
-        {abaAtiva === 'dashboard' && <DashboardModulo />}
-        {abaAtiva === 'precificacao' && <PrecificacaoModulo />}
-        {abaAtiva === 'revenda' && <CadastroRevenda atendente={atendenteNome} />}
-        {abaAtiva === 'entradas' && <EntradasCompras atendente={atendenteNome} />}
-        {abaAtiva === 'financeiro' && <ContasPagarModulo />}
-        {abaAtiva === 'comandas' && <GestaoComandas atendente={atendenteNome} />}
-        {abaAtiva === 'rendimentos' && <DashboardRendimentos />}
-        {abaAtiva === 'relatorio-vendas' && <RelatorioVendasModulo />}
+        <Suspense fallback={<div className="p-6 text-center">Carregando módulo...</div>}>
+          {abaAtiva === 'pdv' && <PDVModulo atendente={atendenteNome} />}
+          {abaAtiva === 'dashboard' && <DashboardModulo />}
+          {abaAtiva === 'precificacao' && <PrecificacaoModulo />}
+          {abaAtiva === 'revenda' && <CadastroRevenda atendente={atendenteNome} />}
+          {abaAtiva === 'entradas' && <EntradasCompras atendente={atendenteNome} />}
+          {abaAtiva === 'financeiro' && <ContasPagarModulo />}
+          {abaAtiva === 'comandas' && <GestaoComandas atendente={atendenteNome} />}
+          {abaAtiva === 'rendimentos' && <DashboardRendimentos />}
+          {abaAtiva === 'relatorio-vendas' && <RelatorioVendasModulo />}
+        </Suspense>
       </main>
     </div>
   );
