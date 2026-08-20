@@ -275,6 +275,16 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
             await supabase.from('comandas').update({ status: 'fechada' }).eq('id', comandaAberta.id);
 
+            // --- NOVO: ALIMENTA O SALDO DIGITAL DO BANCO ---
+            const totalBanco = vPix + vCred + vDeb;
+            if (totalBanco > 0) {
+                const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
+                if (banco) {
+                    await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + totalBanco }).eq('id', 1);
+                }
+            }
+            // ------------------------------------------------
+
             mostrarMensagem('Venda finalizada e estoque atualizado!', 'sucesso');
             setModalCheckout(false); setComandaAberta(null);
             carregarDados(true);

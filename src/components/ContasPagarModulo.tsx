@@ -14,6 +14,7 @@ type Conta = {
 };
 
 type Fornecedor = { id: string; nome: string };
+type PagamentoMisto = { metodo: string; valor: number | '' };
 
 export default function ContasPagarModulo() {
     const [contas, setContas] = useState<Conta[]>([]);
@@ -30,7 +31,13 @@ export default function ContasPagarModulo() {
     const [modalAjusteBanco, setModalAjusteBanco] = useState(false);
     const [novoSaldoBanco, setNovoSaldoBanco] = useState<number | ''>('');
 
+    // Estados para o Pagamento da Conta (Único ou Misto)
+    const [modoPagamentoBaixa, setModoPagamentoBaixa] = useState<'unico' | 'misto'>('unico');
     const [metodoPagamentoBaixa, setMetodoPagamentoBaixa] = useState('PIX');
+    const [pagamentosMistosBaixa, setPagamentosMistosBaixa] = useState<PagamentoMisto[]>([
+        { metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }
+    ]);
+
     const [modalMovimento, setModalMovimento] = useState<'suprimento' | 'sangria' | null>(null);
     const [valorMovimento, setValorMovimento] = useState<number | ''>('');
     const [motivoMovimento, setMotivoMovimento] = useState('');
@@ -142,13 +149,9 @@ export default function ContasPagarModulo() {
             const somaDividida = vPix + vDin + vCred + vDeb;
 
             if (somaDividida > 0) {
-                pix += vPix;
-                din += vDin;
-                cred += vCred;
-                deb += vDeb;
+                pix += vPix; din += vDin; cred += vCred; deb += vDeb;
             } else {
                 const metodo = String(v.metodo_pagamento || '').trim().toLowerCase();
-
                 if (metodo.includes('pix')) pix += vTotal;
                 else if (metodo.includes('dinheiro')) din += vTotal;
                 else if (metodo.includes('crédito') || metodo.includes('credito')) cred += vTotal;
@@ -478,55 +481,116 @@ export default function ContasPagarModulo() {
         }
     };
 
+    // FUNÇÃO QUE PREPARA E ABRE O MODAL DE PAGAMENTO
+    const abrirModalPagamento = (conta: Conta) => {
+        setContaParaPagar(conta);
+        setModoPagamentoBaixa('unico');
+        setMetodoPagamentoBaixa('PIX');
+        setPagamentosMistosBaixa([
+            { metodo: 'PIX', valor: '' },
+            { metodo: 'Dinheiro', valor: '' }
+        ]);
+    };
+
+    // FUNÇÃO QUE PROCESSA A BAIXA (MÚLTIPLA OU ÚNICA)
     const confirmarPagamento = async () => {
         if (!contaParaPagar) return;
 
-        if (metodoPagamentoBaixa === 'Dinheiro' && !caixaAtivo) {
-            return mostrarMensagem('Não é possível pagar em dinheiro com o caixa fechado.', 'erro');
+        let stringMetodos = '';
+        let totalDinheiro = 0;
+        let totalBanco = 0;
+
+        if (modoPagamentoBaixa === 'unico') {
+            stringMetodos = metodoPagamentoBaixa;
+            if (metodoPagamentoBaixa === 'Dinheiro') {
+                totalDinheiro = contaParaPagar.valor;
+            } else {
+                totalBanco = contaParaPagar.valor;
+            }
+        } else {
+            const totalPagoMisto = pagamentosMistosBaixa.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+
+            // Para Contas a Pagar, o valor não pode ter troco, tem que bater cravado.
+            if (totalPagoMisto !== contaParaPagar.valor) {
+                return mostrarMensagem(`A soma dos pagamentos deve ser exatamente ${formatarMoeda(contaParaPagar.valor)}.`, 'aviso');
+            }
+
+            const metodosUsados = pagamentosMistosBaixa.filter(p => Number(p.valor) > 0);
+            stringMetodos = Array.from(new Set(metodosUsados.map(p => p.metodo))).join(' + ');
+
+            metodosUsados.forEach(p => {
+                const val = Number(p.valor);
+                if (p.metodo === 'Dinheiro') totalDinheiro += val;
+                else totalBanco += val;
+            });
+        }
+
+        if (totalDinheiro > 0 && !caixaAtivo) {
+            return mostrarMensagem('Não é possível pagar em dinheiro (físico) com o caixa fechado.', 'erro');
         }
 
         try {
             const dataHoje = new Date().toISOString().split('T')[0];
 
-            if (metodoPagamentoBaixa === 'Dinheiro' && caixaAtivo) {
+            if (totalDinheiro > 0 && caixaAtivo) {
                 await supabase.from('movimentacoes_caixa').insert([{
                     caixa_id: caixaAtivo.id,
                     tipo: 'despesa',
-                    valor: contaParaPagar.valor,
-                    descricao: `Pago: ${contaParaPagar.descricao}`
+                    valor: totalDinheiro,
+                    descricao: `Pago (${modoPagamentoBaixa === 'misto' ? 'Parcial' : 'Integral'}): ${contaParaPagar.descricao}`
                 }]);
             }
 
-            if (metodoPagamentoBaixa === 'PIX' || metodoPagamentoBaixa === 'Cartão de Débito' || metodoPagamentoBaixa === 'Transferência') {
-                const saldoAtualizado = saldoDigital - contaParaPagar.valor;
+            if (totalBanco > 0) {
+                const saldoAtualizado = saldoDigital - totalBanco;
                 await supabase.from('conta_bancaria').update({ saldo: saldoAtualizado }).eq('id', 1);
             }
 
             await supabase.from('contas_pagar').update({
                 status: 'Pago',
                 data_pagamento: dataHoje,
-                metodo_pagamento: metodoPagamentoBaixa
+                metodo_pagamento: stringMetodos
             }).eq('id', contaParaPagar.id);
 
-            mostrarMensagem('Conta marcada como PAGA!', 'sucesso');
+            mostrarMensagem('Conta marcada como PAGA com sucesso!', 'sucesso');
             carregarDados();
-        } catch (error) { console.error(error); mostrarMensagem('Erro ao pagar conta.', 'erro'); }
-        finally { setContaParaPagar(null); setMetodoPagamentoBaixa('PIX'); }
+        } catch (error) {
+            console.error(error);
+            mostrarMensagem('Erro ao registrar baixa da conta.', 'erro');
+        } finally {
+            setContaParaPagar(null);
+            setMetodoPagamentoBaixa('PIX');
+        }
     };
 
+    // --- NOVA FUNÇÃO DE ESTORNO DE CONTA (INCLUI REVERSÃO DE LOTE E BANCO) ---
     const confirmarExclusao = async () => {
         if (!contaParaApagar) return;
         try {
+            // 1. REVERTER DINHEIRO SE A CONTA JÁ ESTAVA PAGA
             if (contaParaApagar.status === 'Pago') {
-                if (contaParaApagar.metodo_pagamento === 'Dinheiro' && caixaAtivo) {
-                    await supabase.from('movimentacoes_caixa').insert([{
-                        caixa_id: caixaAtivo.id,
-                        tipo: 'suprimento',
-                        valor: contaParaApagar.valor,
-                        descricao: `Estorno de Despesa: ${contaParaApagar.descricao}`
-                    }]);
-                }
-                if (contaParaApagar.metodo_pagamento === 'PIX' || contaParaApagar.metodo_pagamento === 'Cartão de Débito' || contaParaApagar.metodo_pagamento === 'Transferência') {
+                const metodos = contaParaApagar.metodo_pagamento || '';
+
+                if (metodos.includes('+')) {
+                    // Para estorno misto, devolve tudo pro Banco e avisa
+                    const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
+                    if (banco) {
+                        await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + contaParaApagar.valor }).eq('id', 1);
+                    }
+                    setTimeout(() => mostrarMensagem('Aviso: Conta mista estornada! O valor total foi devolvido ao Saldo Digital.', 'aviso'), 1000);
+                } else if (metodos === 'Dinheiro') {
+                    if (caixaAtivo) {
+                        await supabase.from('movimentacoes_caixa').insert([{
+                            caixa_id: caixaAtivo.id,
+                            tipo: 'suprimento',
+                            valor: contaParaApagar.valor,
+                            descricao: `Estorno de Despesa: ${contaParaApagar.descricao}`
+                        }]);
+                    } else {
+                        mostrarMensagem('Caixa fechado! O estorno em dinheiro não afetou a gaveta atual.', 'aviso');
+                    }
+                } else {
+                    // Abrange qualquer meio digital: PIX, Cartão de Crédito, Débito e Transferência
                     const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
                     if (banco) {
                         await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + contaParaApagar.valor }).eq('id', 1);
@@ -534,11 +598,48 @@ export default function ContasPagarModulo() {
                 }
             }
 
+            // 2. REVERTER ESTOQUE SE FOI COMPRA DE LOTE
+            const loteMatch = contaParaApagar.descricao.match(/\[LOTE-(.*?)\]/);
+            if (loteMatch) {
+                const loteId = loteMatch[1];
+                // Verifica se já estornou (pois pode haver 2 contas de pagamentos diferentes para o mesmo lote)
+                const { data: jaEstornado } = await supabase.from('movimentacoes_estoque').select('id').eq('motivo', `Estorno Lote [LOTE-${loteId}]`).limit(1);
+
+                if (!jaEstornado || jaEstornado.length === 0) {
+                    // Busca quais foram os produtos inseridos nesse lote original
+                    const { data: movs } = await supabase.from('movimentacoes_estoque').select('produto_id, quantidade').eq('motivo', `Abastecimento via Lote [LOTE-${loteId}]`);
+
+                    if (movs && movs.length > 0) {
+                        for (const m of movs) {
+                            const { data: p } = await supabase.from('produtos').select('quantidade_estoque').eq('id', m.produto_id).single();
+                            if (p) {
+                                // Subtrai o que foi comprado do estoque
+                                await supabase.from('produtos').update({ quantidade_estoque: p.quantidade_estoque - m.quantidade }).eq('id', m.produto_id);
+
+                                // Registra a movimentação de saída do estorno
+                                await supabase.from('movimentacoes_estoque').insert([{
+                                    produto_id: m.produto_id,
+                                    quantidade: -m.quantidade,
+                                    tipo_movimento: 'Saída - Estorno Compra',
+                                    motivo: `Estorno Lote [LOTE-${loteId}]`,
+                                    atendente: 'Sistema'
+                                }]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. APAGAR A CONTA FINALMENTE
             await supabase.from('contas_pagar').delete().eq('id', contaParaApagar.id);
-            mostrarMensagem('Conta removida e saldo atualizado!', 'sucesso');
+            mostrarMensagem('Conta removida e estornada com sucesso!', 'sucesso');
             carregarDados();
-        } catch (error) { console.error(error); mostrarMensagem('Erro ao excluir conta.', 'erro'); }
-        finally { setContaParaApagar(null); }
+        } catch (error) {
+            console.error(error);
+            mostrarMensagem('Erro ao excluir conta.', 'erro');
+        } finally {
+            setContaParaApagar(null);
+        }
     };
 
     if (carregando) return <div className="text-center py-10 font-bold text-cafe-primary animate-pulse">A carregar o financeiro...</div>;
@@ -713,7 +814,7 @@ export default function ContasPagarModulo() {
                                                 </div>
                                             </div>
 
-                                            {/* LISTAGENS DETALHADAS (Mapeadas para mobile em vez de table) */}
+                                            {/* LISTAGENS DETALHADAS */}
                                             <div className="mt-8 pt-6 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
                                                 <h4 className="font-black text-gray-800 dark:text-white text-base mb-4 uppercase tracking-wider">Detalhamento de Registros</h4>
 
@@ -825,20 +926,58 @@ export default function ContasPagarModulo() {
             {/* Modal de Pagamento */}
             {contaParaPagar && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center max-h-[90vh] overflow-y-auto">
                         <div className="text-green-500 text-4xl mb-2">💸</div>
                         <h3 className="text-xl font-black text-cafe-dark mb-2">Dar Baixa na Conta</h3>
-                        <p className="text-gray-600 mb-6 text-sm">Confirma o pagamento de <strong className="text-lg block my-1 text-gray-800">{formatarMoeda(contaParaPagar.valor)}</strong> para <span className="font-semibold">{contaParaPagar.descricao}</span>?</p>
+                        <p className="text-gray-600 mb-6 text-sm">A conta de <span className="font-semibold">{contaParaPagar.descricao}</span> custa <strong className="text-lg block my-1 text-gray-800">{formatarMoeda(contaParaPagar.valor)}</strong></p>
 
-                        <div className="mb-6 text-left">
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Forma de Pagamento</label>
-                            <select className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 font-bold text-base md:text-sm outline-none focus:ring-2 focus:ring-green-400" value={metodoPagamentoBaixa} onChange={(e) => setMetodoPagamentoBaixa(e.target.value)}>
-                                <option value="PIX">📱 PIX (Debita Banco)</option>
-                                <option value="Dinheiro">💵 Dinheiro (Da Gaveta)</option>
-                                <option value="Cartão de Débito">💳 Débito (Banco)</option>
-                                <option value="Transferência">🏦 Transferência (Banco)</option>
-                            </select>
+                        <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
+                            <button onClick={() => setModoPagamentoBaixa('unico')} className={`flex-1 text-sm py-2 font-bold rounded transition ${modoPagamentoBaixa === 'unico' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Forma Única</button>
+                            <button onClick={() => setModoPagamentoBaixa('misto')} className={`flex-1 text-sm py-2 font-bold rounded transition ${modoPagamentoBaixa === 'misto' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Pag. Misto</button>
                         </div>
+
+                        {modoPagamentoBaixa === 'unico' && (
+                            <div className="mb-6 text-left">
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Forma de Pagamento</label>
+                                <select className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 font-bold text-base md:text-sm outline-none focus:ring-2 focus:ring-green-400" value={metodoPagamentoBaixa} onChange={(e) => setMetodoPagamentoBaixa(e.target.value)}>
+                                    <option value="PIX">📱 PIX (Debita Banco)</option>
+                                    <option value="Dinheiro">💵 Dinheiro (Da Gaveta)</option>
+                                    <option value="Cartão de Débito">💳 Débito (Banco)</option>
+                                    <option value="Transferência">🏦 Transferência (Banco)</option>
+                                </select>
+                            </div>
+                        )}
+
+                        {modoPagamentoBaixa === 'misto' && (
+                            <div className="space-y-3 mb-6 border p-3 rounded-lg bg-gray-50 text-left">
+                                {pagamentosMistosBaixa.map((pm, index) => (
+                                    <div key={index} className="flex gap-2 items-center">
+                                        <select className="flex-1 p-2 border rounded text-sm font-semibold bg-white outline-none" value={pm.metodo} onChange={(e) => { const n = [...pagamentosMistosBaixa]; n[index].metodo = e.target.value; setPagamentosMistosBaixa(n); }}>
+                                            <option value="PIX">PIX</option>
+                                            <option value="Dinheiro">Dinheiro</option>
+                                            <option value="Cartão de Débito">Débito</option>
+                                            <option value="Transferência">Transferência</option>
+                                        </select>
+                                        <input type="number" placeholder="Valor" className="w-24 p-2 border rounded text-sm font-bold text-base outline-none" value={pm.valor} onChange={(e) => { const n = [...pagamentosMistosBaixa]; n[index].valor = Number(e.target.value); setPagamentosMistosBaixa(n); }} />
+                                        {index > 0 && <button onClick={() => setPagamentosMistosBaixa(pagamentosMistosBaixa.filter((_, i) => i !== index))} className="w-8 h-8 flex items-center justify-center text-red-500 font-bold bg-white border rounded shadow-sm hover:bg-red-50">✕</button>}
+                                    </div>
+                                ))}
+                                <button onClick={() => setPagamentosMistosBaixa([...pagamentosMistosBaixa, { metodo: 'Transferência', valor: '' }])} className="w-full text-xs font-bold text-cafe-primary hover:underline bg-white py-2 border border-dashed rounded">+ Adicionar Forma</button>
+
+                                <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t border-gray-200">
+                                    {(() => {
+                                        const totalPagoMistoBaixa = pagamentosMistosBaixa.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+                                        const faltaMisto = contaParaPagar.valor - totalPagoMistoBaixa;
+                                        return (
+                                            <>
+                                                <span className={faltaMisto > 0 ? 'text-red-500' : 'text-gray-500'}>Falta: {formatarMoeda(faltaMisto > 0 ? faltaMisto : 0)}</span>
+                                                <span className={faltaMisto < 0 ? 'text-blue-600' : 'text-gray-500'}>Sobra: {formatarMoeda(faltaMisto < 0 ? Math.abs(faltaMisto) : 0)}</span>
+                                            </>
+                                        )
+                                    })()}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex gap-3">
                             <button onClick={() => setContaParaPagar(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold transition">Voltar</button>
@@ -848,7 +987,7 @@ export default function ContasPagarModulo() {
                 </div>
             )}
 
-            {/* Modal de Exclusão */}
+            {/* Modal de Exclusão/Estorno */}
             {contaParaApagar && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center">
@@ -1011,7 +1150,7 @@ export default function ContasPagarModulo() {
                                         <span className="font-black text-xl text-cafe-dark">{formatarMoeda(conta.valor)}</span>
                                         <div className="flex gap-2">
                                             <button onClick={() => abrirModalEdicao(conta)} className="bg-blue-50 text-blue-700 font-bold px-3 py-2.5 rounded-lg border border-blue-200 shadow-sm active:scale-95 transition text-sm">Editar</button>
-                                            <button onClick={() => setContaParaPagar(conta)} className="bg-green-50 text-green-700 font-bold px-4 py-2.5 rounded-lg border border-green-200 shadow-sm active:scale-95 transition text-sm">Dar Baixa</button>
+                                            <button onClick={() => abrirModalPagamento(conta)} className="bg-green-50 text-green-700 font-bold px-4 py-2.5 rounded-lg border border-green-200 shadow-sm active:scale-95 transition text-sm">Dar Baixa</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1033,7 +1172,7 @@ export default function ContasPagarModulo() {
                                             <td className="p-4 font-black text-gray-800 text-right text-base">{formatarMoeda(conta.valor)}</td>
                                             <td className="p-4 text-center space-x-2">
                                                 <button onClick={() => abrirModalEdicao(conta)} className="text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 font-bold text-xs border border-blue-200 transition shadow-sm">Editar</button>
-                                                <button onClick={() => setContaParaPagar(conta)} className="text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100 font-bold text-xs border border-green-200 transition shadow-sm">Dar Baixa</button>
+                                                <button onClick={() => abrirModalPagamento(conta)} className="text-green-700 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100 font-bold text-xs border border-green-200 transition shadow-sm">Dar Baixa</button>
                                                 <button onClick={() => setContaParaApagar(conta)} className="text-gray-400 font-black hover:text-red-500 text-base px-2 py-1 bg-gray-50 rounded-lg transition">✕</button>
                                             </td>
                                         </tr>

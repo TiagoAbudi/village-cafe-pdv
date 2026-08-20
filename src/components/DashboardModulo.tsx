@@ -93,9 +93,11 @@ export default function DashboardModulo() {
     }
   };
 
+  // --- ATUALIZADO: CANCELAR VENDA (ESTORNA O BANCO) ---
   const confirmarCancelamentoVenda = async () => {
     if (!vendaParaCancelar || !caixaAtual) return;
     try {
+      // 1. Restaurar o Estoque
       const { data: fichas } = await supabase.from('fichas_tecnicas').select('produto_venda_id');
       const fichasIds = new Set(fichas?.map(f => f.produto_venda_id) || []);
       const { data: itens } = await supabase.from('itens_venda').select('produto_id, quantidade').eq('venda_id', vendaParaCancelar.id);
@@ -109,10 +111,23 @@ export default function DashboardModulo() {
         }
       }
 
+      // 2. Estornar Saldo do Banco Digital
+      const valorBancoEstorno = (Number(vendaParaCancelar.valor_pix) || 0) +
+        (Number(vendaParaCancelar.valor_cartao_credito) || 0) +
+        (Number(vendaParaCancelar.valor_cartao_debito) || 0);
+
+      if (valorBancoEstorno > 0) {
+        const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
+        if (banco) {
+          await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) - valorBancoEstorno }).eq('id', 1);
+        }
+      }
+
+      // 3. Deletar Venda
       await supabase.from('itens_venda').delete().eq('venda_id', vendaParaCancelar.id);
       await supabase.from('vendas').delete().eq('id', vendaParaCancelar.id);
 
-      mostrarMensagem('Venda cancelada e estoque restaurado.', 'sucesso');
+      mostrarMensagem('Venda cancelada e saldo digital estornado!', 'sucesso');
       buscarVendasDoCaixa(caixaAtual.data_abertura, caixaAtual.id);
     } catch (error) { console.error(error); mostrarMensagem('Erro ao cancelar a venda.', 'erro'); }
     finally { setVendaParaCancelar(null); }
@@ -166,12 +181,14 @@ export default function DashboardModulo() {
   const totalEdicao = useMemo(() => carrinhoEdicao.reduce((acc, item) => acc + (item.preco_unitario * item.quantidade), 0), [carrinhoEdicao]);
   const totalPagoEdicao = (Number(editPix) || 0) + (Number(editDinheiro) || 0) + (Number(editCredito) || 0) + (Number(editDebito) || 0);
 
+  // --- ATUALIZADO: SALVAR EDIÇÃO (AJUSTA O BANCO) ---
   const salvarEdicaoVenda = async () => {
     if (!vendaEmEdicao || !caixaAtual) return;
     if (carrinhoEdicao.length === 0) return mostrarMensagem('A venda precisa ter pelo menos 1 item. Se quiser zerar, use Cancelar Venda.', 'aviso');
     if (totalPagoEdicao !== totalEdicao) return mostrarMensagem(`Ajuste os pagamentos! O total dos itens é ${formatarMoeda(totalEdicao)} mas os pagamentos somam ${formatarMoeda(totalPagoEdicao)}.`, 'erro');
 
     try {
+      // Ajuste de Estoque
       for (const item of vendaEmEdicao.itens_venda) {
         const isReceita = produtosDisponiveis.find(p => p.id === item.produto_id)?.is_receita;
         if (!isReceita) {
@@ -187,12 +204,31 @@ export default function DashboardModulo() {
         }
       }
 
+      // Ajuste do Banco Digital (Calcula a diferença entre o que era antes e o novo)
+      const valorBancoAntigo = (Number(vendaEmEdicao.valor_pix) || 0) +
+        (Number(vendaEmEdicao.valor_cartao_credito) || 0) +
+        (Number(vendaEmEdicao.valor_cartao_debito) || 0);
+
+      const valorBancoNovo = (Number(editPix) || 0) +
+        (Number(editCredito) || 0) +
+        (Number(editDebito) || 0);
+
+      const diferencaBanco = valorBancoNovo - valorBancoAntigo;
+
+      if (diferencaBanco !== 0) {
+        const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
+        if (banco) {
+          await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + diferencaBanco }).eq('id', 1);
+        }
+      }
+
       const metodosUsados = [];
       if (editPix) metodosUsados.push('PIX');
       if (editDinheiro) metodosUsados.push('Dinheiro');
       if (editCredito) metodosUsados.push('Cartão de Crédito');
       if (editDebito) metodosUsados.push('Cartão de Débito');
 
+      // Atualiza Venda
       await supabase.from('vendas').update({
         total: totalEdicao, metodo_pagamento: metodosUsados.join(' + '),
         valor_pix: Number(editPix) || 0, valor_dinheiro: Number(editDinheiro) || 0,
@@ -459,7 +495,7 @@ export default function DashboardModulo() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 max-w-sm w-full text-center">
             <div className="text-red-500 text-5xl mb-4">⚠️</div>
             <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-2">Cancelar Venda</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm px-2">Deseja cancelar o pedido <strong>{vendaParaCancelar.identificacao_pedido}</strong>? O valor sairá do caixa e o estoque será restaurado.</p>
+            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm px-2">Deseja cancelar o pedido <strong>{vendaParaCancelar.identificacao_pedido}</strong>? O valor sairá do caixa/banco e o estoque será restaurado.</p>
             <div className="flex gap-3">
               <button onClick={() => setVendaParaCancelar(null)} className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:text-white py-3 rounded-xl font-bold transition">Voltar</button>
               <button onClick={confirmarCancelamentoVenda} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow transition">Sim, Cancelar</button>

@@ -205,14 +205,17 @@ export default function DashboardRendimentos() {
 
     const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 
-    // ---------- CÁLCULOS DO GRÁFICO SVG ----------
+    // ---------- CÁLCULOS DO GRÁFICO SVG (CORRIGIDO PARA NÃO CORTAR O BALÃO) ----------
     const numPontos = Math.max(metricas.graficoDados.length, 1);
-    const svgWidth = Math.max(800, numPontos * 100);
-    const svgHeight = 320;
 
-    const padX = 70;
-    const padYTop = 100;
-    const padYBot = 270;
+    // Margens super protegidas para caber as extremidades da esquerda e direita
+    const padX = 120;
+    const svgWidth = Math.max(800, numPontos * 130);
+
+    // Altura gigante para caber perfeitamente o tooltip no ponto mais alto
+    const svgHeight = 480;
+    const padYTop = 240; // O teto máximo da linha agora é bem mais pra baixo
+    const padYBot = 400; // O chão da linha
 
     const usableWidth = svgWidth - padX * 2;
     const usableHeight = padYBot - padYTop;
@@ -344,35 +347,35 @@ export default function DashboardRendimentos() {
                             <p className="text-center text-gray-600 py-16 italic font-bold">Sem vendas registradas neste período.</p>
                         ) : (
                             <div className="w-full relative pb-2 pt-2 md:pt-4">
-                                <div className="w-full overflow-x-auto custom-scrollbar relative">
+                                <div className="w-full overflow-x-auto overflow-y-hidden custom-scrollbar relative">
                                     <div className="relative" style={{ height: `${svgHeight}px`, minWidth: `${svgWidth}px` }}>
 
                                         {tooltip.visivel && tooltip.p && (
                                             <div
-                                                className="absolute z-50 bg-white text-gray-800 p-3 md:p-4 rounded-xl shadow-2xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-100 min-w-[150px] border border-gray-200"
+                                                className="absolute z-50 bg-white text-gray-800 p-3 md:p-4 rounded-xl shadow-2xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity duration-100 min-w-[160px] border border-gray-200"
                                                 style={{
                                                     left: `${(tooltip.p.x / svgWidth) * 100}%`,
-                                                    top: `calc(${(tooltip.p.y / svgHeight) * 100}% - 20px)`
+                                                    top: `calc(${(tooltip.p.y / svgHeight) * 100}% - 25px)`
                                                 }}
                                             >
                                                 <div className="font-black text-sm text-center border-b border-gray-200 pb-2 mb-3 text-cafe-dark">{tooltip.p.dataCurta}</div>
 
                                                 <div className="space-y-2">
-                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold">
+                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold gap-3">
                                                         <span>Bruto:</span>
                                                         <span className="font-black text-gray-900 ml-3">{formatarMoeda(tooltip.p.valor)}</span>
                                                     </div>
-                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold">
+                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold gap-3">
                                                         <span>Custo:</span>
                                                         <span className="font-black text-red-500 ml-3">{formatarMoeda(tooltip.p.custo)}</span>
                                                     </div>
-                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold bg-green-50 p-1.5 rounded-md border border-green-100">
+                                                    <div className="flex justify-between items-center text-xs text-gray-600 font-bold bg-green-50 p-1.5 rounded-md border border-green-100 gap-3">
                                                         <span className="text-green-800">Lucro:</span>
                                                         <span className="font-black text-green-700 ml-3">{formatarMoeda(tooltip.p.lucro)}</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex justify-between items-center text-xs text-gray-500 mt-3 pt-2 border-t border-gray-200 font-bold">
+                                                <div className="flex justify-between items-center text-xs text-gray-500 mt-3 pt-2 border-t border-gray-200 font-bold gap-3">
                                                     <span>Qtd Vendas:</span>
                                                     <span className="font-black text-blue-600 ml-2">{tooltip.p.qtd} un</span>
                                                 </div>

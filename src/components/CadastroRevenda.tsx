@@ -12,9 +12,8 @@ type Movimentacao = {
   atendente: string; created_at: string; produtos: { nome: string; unidade_medida: string };
 };
 
-// Tipagens mais explícitas para evitar uso de `any`
-type Fornecedor = { id: string; nome: string; [key: string]: unknown };
-type Caixa = { id: string; status: string; data_abertura?: string; [key: string]: unknown } | null;
+type Fornecedor = { id: string; nome: string;[key: string]: unknown };
+type Caixa = { id: string; status: string; data_abertura?: string;[key: string]: unknown } | null;
 
 type ItemCarrinhoLote = {
   produtoId: string;
@@ -206,7 +205,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     setCarrinhoLote(carrinhoLote.filter(item => item.produtoId !== id));
   };
 
-  // Cálculos dinâmicos para o Pagamento Misto
   const totalCustoLote = carrinhoLote.reduce((acc, item) => acc + (Number(item.qtd) * Number(item.custoUnitario || 0)), 0);
   const totalPagoMistoLote = pagamentosMistosLote.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
   const faltaPagarMistoLote = modoPagamentoLote === 'misto' && totalPagoMistoLote < totalCustoLote ? totalCustoLote - totalPagoMistoLote : 0;
@@ -216,7 +214,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     if (carrinhoLote.length === 0) return mostrarMensagem('O carrinho está vazio.', 'aviso');
     if (carrinhoLote.some(item => !item.qtd || Number(item.qtd) <= 0)) return mostrarMensagem('Qtd inválida no carrinho.', 'aviso');
 
-    // Validação Financeira e Distribuição dos Pagamentos
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0, vTrans = 0, vPrazo = 0;
     const metodosImediatos: string[] = [];
 
@@ -272,7 +269,10 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
     setCarregando(true);
     try {
-      // 1. Atualizar Estoques e Preços
+      // 1. Gera um Código de Rastreio Único para essa transação de Lote
+      const loteId = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      // 2. Atualiza Estoques e Preços
       for (const item of carrinhoLote) {
         const prod = produtos.find(p => p.id === item.produtoId);
         if (!prod) continue;
@@ -287,11 +287,12 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         }).eq('id', item.produtoId);
 
         await supabase.from('movimentacoes_estoque').insert([{
-          produto_id: item.produtoId, quantidade: qtd, tipo_movimento: 'Entrada - Compra Lote', motivo: 'Abastecimento via Lote', atendente
+          produto_id: item.produtoId, quantidade: qtd, tipo_movimento: 'Entrada - Compra Lote',
+          motivo: `Abastecimento via Lote [LOTE-${loteId}]`, atendente
         }]);
       }
 
-      // 2. Registrar Transação Financeira
+      // 3. Registrar Transação Financeira com a Tag de Rastreio
       if (totalCustoLote > 0) {
         const dataHoje = new Date().toISOString().split('T')[0];
 
@@ -300,7 +301,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
           const metodosUnicos = Array.from(new Set(metodosImediatos)).join(' + ');
 
           await supabase.from('contas_pagar').insert([{
-            descricao: `Compra Lote (Pagamento Imediato)`,
+            descricao: `Compra Lote [LOTE-${loteId}] (Pag. Imediato)`,
             fornecedor_id: fornecedorLoteId || null,
             valor: valorImediatoTotal,
             data_vencimento: dataHoje,
@@ -315,7 +316,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
             }]);
           }
 
-          const valorBanco = vPix + vDeb + vTrans;
+          const valorBanco = vPix + vDeb + vTrans + vCred;
           if (valorBanco > 0) {
             const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
             if (banco) {
@@ -327,7 +328,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         // Lançar valor a prazo (Contas a Pagar)
         if (vPrazo > 0) {
           await supabase.from('contas_pagar').insert([{
-            descricao: `Compra Lote (A Prazo)`,
+            descricao: `Compra Lote [LOTE-${loteId}] (A Prazo)`,
             fornecedor_id: fornecedorLoteId || null,
             valor: vPrazo,
             data_vencimento: dataVencimentoLote,
@@ -357,7 +358,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     } catch (error) { console.error(error); mostrarMensagem('Erro ao atualizar.', 'erro'); }
   };
 
-  // Verifica se o campo de Data de Vencimento deve ser exibido
   const mostraVencimentoLote = (modoPagamentoLote === 'unico' && metodoPagamentoLote === 'Conta a Pagar') ||
     (modoPagamentoLote === 'misto' && pagamentosMistosLote.some(p => p.metodo === 'Conta a Pagar' && Number(p.valor) > 0));
 
@@ -371,7 +371,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       )}
 
       {/* MODAL: CARRINHO DE ENTRADA EM LOTE */}
-      {/* MODAL: CARRINHO DE ENTRADA EM LOTE */}
       {modalLoteOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-0 md:p-4">
           <div className="bg-white md:rounded-2xl shadow-2xl w-full max-w-5xl h-full md:h-[85vh] flex flex-col overflow-hidden border-0 md:border">
@@ -384,7 +383,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
               <button onClick={() => { setModalLoteOpen(false); setCarrinhoLote([]); setAbaLoteMobile('busca'); }} className="text-gray-400 hover:text-red-500 font-black text-2xl px-2">✕</button>
             </div>
 
-            {/* NAVEGAÇÃO MOBILE (TABS) */}
             <div className="lg:hidden flex bg-gray-100 p-1.5 shrink-0 border-b">
               <button
                 onClick={() => setAbaLoteMobile('busca')}
@@ -439,7 +437,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                   {produtosFiltradosLote.length === 0 && <p className="text-center text-gray-400 italic text-sm mt-6">Produto não encontrado.</p>}
                 </div>
 
-                {/* Botão flutuante mobile para ir ao carrinho rapidamente */}
                 {abaLoteMobile === 'busca' && carrinhoLote.length > 0 && (
                   <div className="lg:hidden absolute bottom-4 left-4 right-4 z-50">
                     <button onClick={() => setAbaLoteMobile('carrinho')} className="w-full bg-green-600 text-white font-black py-4 rounded-xl shadow-[0_4px_14px_0_rgba(22,163,74,0.39)] hover:bg-green-700 active:scale-95 transition flex justify-center items-center gap-2">
