@@ -34,6 +34,7 @@ export default function ContasPagarModulo() {
     // Estados para o Pagamento da Conta (Único ou Misto)
     const [modoPagamentoBaixa, setModoPagamentoBaixa] = useState<'unico' | 'misto'>('unico');
     const [metodoPagamentoBaixa, setMetodoPagamentoBaixa] = useState('PIX');
+    const [valorBaixa, setValorBaixa] = useState<number | ''>(''); // NOVO ESTADO: Valor editável na hora da baixa
     const [pagamentosMistosBaixa, setPagamentosMistosBaixa] = useState<PagamentoMisto[]>([
         { metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }
     ]);
@@ -484,6 +485,7 @@ export default function ContasPagarModulo() {
     // FUNÇÃO QUE PREPARA E ABRE O MODAL DE PAGAMENTO
     const abrirModalPagamento = (conta: Conta) => {
         setContaParaPagar(conta);
+        setValorBaixa(conta.valor); // Inicia o input com o valor original
         setModoPagamentoBaixa('unico');
         setMetodoPagamentoBaixa('PIX');
         setPagamentosMistosBaixa([
@@ -496,6 +498,9 @@ export default function ContasPagarModulo() {
     const confirmarPagamento = async () => {
         if (!contaParaPagar) return;
 
+        const valorFinal = Number(valorBaixa);
+        if (valorFinal <= 0) return mostrarMensagem('O valor de pagamento deve ser maior que zero.', 'aviso');
+
         let stringMetodos = '';
         let totalDinheiro = 0;
         let totalBanco = 0;
@@ -503,16 +508,16 @@ export default function ContasPagarModulo() {
         if (modoPagamentoBaixa === 'unico') {
             stringMetodos = metodoPagamentoBaixa;
             if (metodoPagamentoBaixa === 'Dinheiro') {
-                totalDinheiro = contaParaPagar.valor;
+                totalDinheiro = valorFinal;
             } else {
-                totalBanco = contaParaPagar.valor;
+                totalBanco = valorFinal;
             }
         } else {
             const totalPagoMisto = pagamentosMistosBaixa.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
 
-            // Para Contas a Pagar, o valor não pode ter troco, tem que bater cravado.
-            if (totalPagoMisto !== contaParaPagar.valor) {
-                return mostrarMensagem(`A soma dos pagamentos deve ser exatamente ${formatarMoeda(contaParaPagar.valor)}.`, 'aviso');
+            // Para Contas a Pagar, a soma dos parciais tem que bater cravado com o valorFinal editável.
+            if (totalPagoMisto !== valorFinal) {
+                return mostrarMensagem(`A soma das formas de pagamento deve ser exatamente ${formatarMoeda(valorFinal)}.`, 'aviso');
             }
 
             const metodosUsados = pagamentosMistosBaixa.filter(p => Number(p.valor) > 0);
@@ -546,10 +551,12 @@ export default function ContasPagarModulo() {
                 await supabase.from('conta_bancaria').update({ saldo: saldoAtualizado }).eq('id', 1);
             }
 
+            // Atualizamos o valor da conta no BD para refletir o que realmente foi pago (caso de juros/desconto)
             await supabase.from('contas_pagar').update({
                 status: 'Pago',
                 data_pagamento: dataHoje,
-                metodo_pagamento: stringMetodos
+                metodo_pagamento: stringMetodos,
+                valor: valorFinal
             }).eq('id', contaParaPagar.id);
 
             mostrarMensagem('Conta marcada como PAGA com sucesso!', 'sucesso');
@@ -929,7 +936,18 @@ export default function ContasPagarModulo() {
                     <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center max-h-[90vh] overflow-y-auto">
                         <div className="text-green-500 text-4xl mb-2">💸</div>
                         <h3 className="text-xl font-black text-cafe-dark mb-2">Dar Baixa na Conta</h3>
-                        <p className="text-gray-600 mb-6 text-sm">A conta de <span className="font-semibold">{contaParaPagar.descricao}</span> custa <strong className="text-lg block my-1 text-gray-800">{formatarMoeda(contaParaPagar.valor)}</strong></p>
+                        <p className="text-gray-600 mb-4 text-sm">Conta: <span className="font-bold text-gray-800">{contaParaPagar.descricao}</span></p>
+
+                        <div className="mb-4">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Valor Final a Pagar (R$)</label>
+                            <input
+                                type="number"
+                                className="w-full p-3 border border-gray-300 rounded-xl bg-white font-black text-xl text-cafe-dark outline-none focus:ring-2 focus:ring-green-400 text-center"
+                                value={valorBaixa}
+                                onChange={(e) => setValorBaixa(e.target.value === '' ? '' : Number(e.target.value))}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Altere se houver juros ou descontos.</p>
+                        </div>
 
                         <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
                             <button onClick={() => setModoPagamentoBaixa('unico')} className={`flex-1 text-sm py-2 font-bold rounded transition ${modoPagamentoBaixa === 'unico' ? 'bg-white shadow text-cafe-primary' : 'text-gray-500 hover:text-gray-700'}`}>Forma Única</button>
@@ -967,7 +985,7 @@ export default function ContasPagarModulo() {
                                 <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t border-gray-200">
                                     {(() => {
                                         const totalPagoMistoBaixa = pagamentosMistosBaixa.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
-                                        const faltaMisto = contaParaPagar.valor - totalPagoMistoBaixa;
+                                        const faltaMisto = Number(valorBaixa) - totalPagoMistoBaixa;
                                         return (
                                             <>
                                                 <span className={faltaMisto > 0 ? 'text-red-500' : 'text-gray-500'}>Falta: {formatarMoeda(faltaMisto > 0 ? faltaMisto : 0)}</span>
