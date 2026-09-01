@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { dataLocalISO } from '../lib/datas';
 
 type TipoAlerta = 'atrasado' | 'hoje' | 'alerta';
 type AlertaItem = { tipo: TipoAlerta; texto: string; valor: string };
@@ -15,8 +16,7 @@ export default function AlertasGlobaisProvider() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const hoje = new Date();
-            hoje.setHours(0, 0, 0, 0);
+            const hoje = new Date(`${dataLocalISO()}T00:00:00`);
 
             const { data: contas } = await supabase
                 .from('contas_pagar')

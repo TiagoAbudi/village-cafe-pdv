@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { apurarPagamentos, type MetodoPagamento, type Pagamento } from '../lib/money';
 
-type ProdutoVenda = { id: string; nome: string; preco_venda: number; quantidade_estoque: number; is_receita: boolean; };
+type ProdutoVenda = { id: string; nome: string; preco_venda: number; preco_custo: number; quantidade_estoque: number; is_receita: boolean; };
 type ItemCarrinho = { produto: ProdutoVenda; quantidade: number; };
 type PagamentoMisto = { metodo: string; valor: number | '' };
 
@@ -25,13 +26,13 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
   ]);
 
   const [caixaAberto, setCaixaAberto] = useState<boolean | null>(null);
+  const [caixaId, setCaixaId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
   const [finalizando, setFinalizando] = useState(false);
 
   const [buscaProduto, setBuscaProduto] = useState('');
   const [buscaDebounced, setBuscaDebounced] = useState(buscaProduto);
 
-  // Debounce da busca para reduzir chamadas e melhorar UX
   useEffect(() => {
     const t = setTimeout(() => setBuscaDebounced(buscaProduto), 300);
     return () => clearTimeout(t);
@@ -50,12 +51,14 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
   const carregarProdutos = async () => {
     const { data: produtosData } = await supabase.from('produtos').select('*').eq('tipo', 'venda').eq('ativo', true).order('nome');
+
+    // Apontando para a tabela original
     const { data: fichasData } = await supabase.from('fichas_tecnicas').select('produto_venda_id');
     const fichasIds = new Set(fichasData?.map(f => f.produto_venda_id));
 
     if (produtosData) {
       setProdutos(produtosData.map(p => ({
-        id: p.id, nome: p.nome, preco_venda: p.preco_venda, quantidade_estoque: p.quantidade_estoque || 0, is_receita: fichasIds.has(p.id)
+        id: p.id, nome: p.nome, preco_venda: p.preco_venda, preco_custo: p.preco_custo || 0, quantidade_estoque: p.quantidade_estoque || 0, is_receita: fichasIds.has(p.id)
       })));
     }
   };
@@ -65,6 +68,7 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
       const { data: caixaData } = await supabase.from('controle_caixa').select('id').eq('status', 'aberto').limit(1).maybeSingle();
       if (!caixaData) return setCaixaAberto(false);
       setCaixaAberto(true);
+      setCaixaId(caixaData.id);
       carregarProdutos();
     };
     iniciarPDV();
@@ -109,70 +113,42 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
   const finalizarVenda = async () => {
     if (carrinho.length === 0) return mostrarMensagem('Adicione produtos ao carrinho.', 'aviso');
-    if (modoPagamento === 'misto' && totalPagoMisto < totalComDesconto) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
+    if (!caixaId) return mostrarMensagem('Nenhum caixa aberto foi identificado. Recarregue a tela.', 'erro');
+    if (valorDesconto < 0 || valorDesconto > totalVenda) return mostrarMensagem('O desconto deve estar entre zero e o total da venda.', 'aviso');
+    const pagamentos: Pagamento[] = modoPagamento === 'unico'
+      ? [{
+        metodo: metodoUnico as MetodoPagamento,
+        valor: metodoUnico === 'Dinheiro' ? Number(valorRecebidoDinheiro) : totalComDesconto,
+      }]
+      : pagamentosMistos.map(p => ({ metodo: p.metodo as MetodoPagamento, valor: Number(p.valor) || 0 }));
+    const pagamento = apurarPagamentos(totalComDesconto, pagamentos);
+    if (!pagamento.aprovado) return mostrarMensagem(pagamento.erro || 'Pagamento inválido.', 'erro');
 
     setFinalizando(true);
 
-    let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
-
-    if (modoPagamento === 'unico') {
-      vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
-      vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
-      vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
-      vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
-    } else {
-      let trocoRestante = trocoMisto;
-      pagamentosMistos.forEach(p => {
-        let val = Number(p.valor) || 0;
-        if (p.metodo === 'PIX') vPix += val;
-        if (p.metodo === 'Cartão de Crédito') vCred += val;
-        if (p.metodo === 'Cartão de Débito') vDeb += val;
-        if (p.metodo === 'Dinheiro') {
-          if (trocoRestante > 0) {
-            if (val >= trocoRestante) { val -= trocoRestante; trocoRestante = 0; }
-            else { trocoRestante -= val; val = 0; }
-          }
-          vDin += val;
-        }
-      });
-    }
-
-    const metodosStr = modoPagamento === 'unico' ? metodoUnico : Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
-
     try {
       const identificacaoFinal = identificacaoPedido.trim() || 'Venda Balcão';
-
-      const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{
-        identificacao_pedido: identificacaoFinal,
-        total: totalComDesconto,
-        desconto: valorDesconto,
-        metodo_pagamento: metodosStr,
-        valor_pix: vPix, valor_dinheiro: vDin, valor_cartao_credito: vCred, valor_cartao_debito: vDeb,
-        atendente: atendente
-      }]).select().single();
-      if (erroVenda) throw erroVenda;
+      const pagamentosRegistrados = [
+        ['PIX', pagamento.pix],
+        ['Dinheiro', pagamento.dinheiro],
+        ['Cartão de Crédito', pagamento.credito],
+        ['Cartão de Débito', pagamento.debito],
+        ['Transferência', pagamento.transferencia],
+      ].filter(([, valor]) => Number(valor) > 0).map(([metodo, valor]) => ({ metodo, valor }));
 
       const itensParaInserir = carrinho.map(item => ({
-        venda_id: vendaCriada.id, produto_id: item.produto.id, quantidade: item.quantidade, preco_unitario: item.produto.preco_venda
+        produto_id: item.produto.id, quantidade: item.quantidade, preco_unitario: item.produto.preco_venda, custo_unitario: item.produto.preco_custo
       }));
-      await supabase.from('itens_venda').insert(itensParaInserir);
-
-      for (const item of carrinho) {
-        if (!item.produto.is_receita) {
-          const novoEstoque = item.produto.quantidade_estoque - item.quantidade;
-          await supabase.from('produtos').update({ quantidade_estoque: novoEstoque }).eq('id', item.produto.id);
-        }
-      }
-
-      // --- NOVO: ALIMENTA O SALDO DIGITAL DO BANCO ---
-      const totalBanco = vPix + vCred + vDeb;
-      if (totalBanco > 0) {
-        const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-        if (banco) {
-          await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + totalBanco }).eq('id', 1);
-        }
-      }
-      // ------------------------------------------------
+      const { error: erroVenda } = await supabase.rpc('registrar_venda', {
+        p_caixa_id: caixaId,
+        p_identificacao_pedido: identificacaoFinal,
+        p_total: totalComDesconto,
+        p_desconto: valorDesconto,
+        p_pagamentos: pagamentosRegistrados,
+        p_atendente: atendente,
+        p_itens: itensParaInserir,
+      });
+      if (erroVenda) throw erroVenda;
 
       mostrarMensagem('Venda finalizada!', 'sucesso');
       setCarrinho([]); setIdentificacaoPedido(''); setValorRecebidoDinheiro(''); setDesconto('');
@@ -191,7 +167,6 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
   if (caixaAberto === false) return (<div className="max-w-md mx-auto bg-white rounded-lg shadow-lg border border-red-200 text-center my-20 p-8"><div className="text-6xl mb-6">🔒</div><h2 className="text-2xl font-bold text-red-600">Caixa Fechado</h2><p className="text-gray-500 mt-2">Abra o caixa no Dashboard para acessar o PDV.</p></div>);
 
   return (
-    // NOTA: items-start é crucial aqui para o sticky funcionar na coluna da direita
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start relative w-full pb-10">
 
       {/* Feedbacks de tela */}
@@ -215,7 +190,6 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
           />
         </div>
 
-        {/* NOTA: max-h responsivo para não criar telas infinitas no celular */}
         <div className="space-y-3 overflow-y-auto max-h-[50vh] lg:max-h-[calc(100vh-250px)] pr-2">
           {produtosFiltrados.map(produto => {
             const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
@@ -256,7 +230,6 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
           </h2>
         </div>
 
-        {/* Lista do carrinho adaptada para touch */}
         <div className="flex-1 overflow-y-auto max-h-[35vh] lg:max-h-[300px] p-4 bg-gray-50">
           {carrinho.length === 0 ? (
             <p className="text-center text-gray-400 font-semibold italic py-6">O carrinho está vazio.</p>
@@ -273,7 +246,6 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
                     <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{formatarMoeda(item.produto.preco_venda)} un</span>
 
                     <div className="flex items-center gap-3 bg-gray-50 border rounded-lg p-1">
-                      {/* Touch targets maiores (w-8 h-8) */}
                       <button onClick={() => alterQuantidade(item.produto.id, -1)} className="w-8 h-8 bg-white border rounded font-bold shadow-sm active:bg-gray-100">-</button>
                       <span className="text-sm font-bold w-6 text-center">{item.quantidade}</span>
                       <button onClick={() => alterQuantidade(item.produto.id, 1)} className="w-8 h-8 bg-cafe-primary text-white rounded font-bold shadow-sm active:bg-cafe-dark">+</button>

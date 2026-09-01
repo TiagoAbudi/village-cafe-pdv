@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { calcularCompraEmbalada } from '../lib/estoque';
 
 type Produto = {
   id: string; nome: string; preco_custo: number; preco_venda: number;
@@ -7,24 +8,33 @@ type Produto = {
   tamanho: number | null; unidade_medida: string;
 };
 
+type Insumo = {
+  id: string; nome: string; unidade_medida: string; preco_total_pago: number;
+  qtd_embalagem: number; fator_correcao: number; custo_unitario: number; quantidade_estoque: number;
+};
+
 type Movimentacao = {
   id: string; quantidade: number; tipo_movimento: string; motivo: string;
   atendente: string; created_at: string; produtos: { nome: string; unidade_medida: string };
 };
 
-type Fornecedor = { id: string; nome: string;[key: string]: unknown };
-type Caixa = { id: string; status: string; data_abertura?: string;[key: string]: unknown } | null;
+type Fornecedor = { id: string; nome: string; [key: string]: unknown };
+type Caixa = { id: string; status: string; data_abertura?: string; [key: string]: unknown } | null;
 
 type ItemCarrinhoLote = {
   produtoId: string;
   nome: string;
   unidade_medida: string;
   qtd: number | '';
-  custoUnitario: number | '';
+  custoUnitario: number | ''; // Para revenda: Custo. Para Insumo: Preço da Embalagem.
   precoVenda: number | '';
+  tipoItem: 'produto' | 'insumo';
+  insumoData?: { qtd_embalagem: number; fator_correcao: number };
 };
 
 type PagamentoMisto = { metodo: string; valor: number | '' };
+
+const gerarIdLote = () => globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
 
 interface CadastroRevendaProps {
   atendente: string;
@@ -32,14 +42,16 @@ interface CadastroRevendaProps {
 
 export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [caixaAtivo, setCaixaAtivo] = useState<Caixa>(null);
   const [carregando, setCarregando] = useState(false);
 
-  // Estados do Formulário de Cadastro
+  // Estados do Formulário de Cadastro (Revenda)
   const [nome, setNome] = useState('');
   const [precoCusto, setPrecoCusto] = useState<number | ''>('');
+  const [margem, setMargem] = useState<number | ''>('');
   const [precoVenda, setPrecoVenda] = useState<number | ''>('');
   const [quantidadeEstoque, setQuantidadeEstoque] = useState<number | ''>('');
   const [estoqueMinimo, setEstoqueMinimo] = useState<number | ''>(5);
@@ -50,7 +62,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
   const [produtoParaApagar, setProdutoParaApagar] = useState<string | null>(null);
 
-  // Estados para o Ajuste de Estoque (Auditoria Individual)
+  // Estados para o Ajuste de Estoque
   const [produtoParaAjuste, setProdutoParaAjuste] = useState<Produto | null>(null);
   const [ajusteTipo, setAjusteTipo] = useState('Entrada - Reposição');
   const [ajusteQuantidade, setAjusteQuantidade] = useState<number | ''>('');
@@ -76,6 +88,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [produtoParaEditar, setProdutoParaEditar] = useState<Produto | null>(null);
   const [editNome, setEditNome] = useState('');
   const [editPrecoCusto, setEditPrecoCusto] = useState<number | ''>('');
+  const [editMargem, setEditMargem] = useState<number | ''>('');
   const [editPrecoVenda, setEditPrecoVenda] = useState<number | ''>('');
   const [editEstoqueMinimo, setEditEstoqueMinimo] = useState<number | ''>('');
   const [editTamanho, setEditTamanho] = useState<number | ''>('');
@@ -83,8 +96,16 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
   const [termoBusca, setTermoBusca] = useState('');
 
+  // FILTROS MESCLADOS (PRODUTOS + INSUMOS)
   const produtosFiltrados = produtos.filter(produto => produto.nome.toLowerCase().includes(termoBusca.toLowerCase()));
-  const produtosFiltradosLote = produtos.filter(produto => produto.nome.toLowerCase().includes(termoBuscaLote.toLowerCase()));
+
+  const mixParaLote = useMemo(() => {
+    const list = [
+        ...produtos.map(p => ({ ...p, tipoItem: 'produto' as const })),
+        ...insumos.map(i => ({ ...i, tipoItem: 'insumo' as const, preco_venda: 0 }))
+    ];
+    return list.filter(item => item.nome.toLowerCase().includes(termoBuscaLote.toLowerCase()));
+  }, [produtos, insumos, termoBuscaLote]);
 
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
     setFeedback({ msg, tipo });
@@ -96,12 +117,14 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     const produtosComReceita = new Set(fichas?.map(f => f.produto_venda_id) || []);
 
     const { data: prodData } = await supabase.from('produtos').select('*').eq('tipo', 'venda').eq('ativo', true).order('nome');
+    const { data: insuData } = await supabase.from('insumos').select('*').order('nome');
     const { data: movData } = await supabase.from('movimentacoes_estoque').select('id, quantidade, tipo_movimento, motivo, atendente, created_at, produto_id, produtos!inner(nome, unidade_medida, tipo)').eq('produtos.tipo', 'venda').order('created_at', { ascending: false }).limit(50);
     const { data: fornData } = await supabase.from('fornecedores').select('*').order('nome');
     const { data: caixaData } = await supabase.from('controle_caixa').select('*').eq('status', 'aberto').order('data_abertura', { ascending: false }).limit(1).maybeSingle();
 
     if (fornData) setFornecedores(fornData as Fornecedor[]);
     if (caixaData) setCaixaAtivo(caixaData as Caixa);
+    if (insuData) setInsumos(insuData as Insumo[]);
 
     if (prodData) {
       setProdutos(prodData.filter(p => !produtosComReceita.has(p.id)));
@@ -119,6 +142,31 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
   const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   const formatarData = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  // --- LÓGICAS DA CALCULADORA DE PREÇO NO CADASTRO ---
+  const handleCustoChange = (val: number | '') => {
+    setPrecoCusto(val);
+    if (val !== '' && margem !== '') {
+      setPrecoVenda(Number((val * (1 + margem / 100)).toFixed(2)));
+    } else if (val !== '' && precoVenda !== '') {
+      setMargem(Number((((precoVenda - val) / val) * 100).toFixed(1)));
+    }
+  };
+
+  const handleMargemChange = (val: number | '') => {
+    setMargem(val);
+    if (val !== '' && precoCusto !== '') {
+      setPrecoVenda(Number((precoCusto * (1 + val / 100)).toFixed(2)));
+    }
+  };
+
+  const handleVendaChange = (val: number | '') => {
+    setPrecoVenda(val);
+    if (val !== '' && precoCusto !== '') {
+      setMargem(Number((((val - precoCusto) / precoCusto) * 100).toFixed(1)));
+    }
+  };
+  // --------------------------------------------------
 
   const cadastrarProduto = async () => {
     if (!nome || !precoVenda) return mostrarMensagem('Preencha pelo menos o nome e o preço de venda.', 'aviso');
@@ -140,7 +188,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       }
 
       mostrarMensagem('Produto cadastrado com sucesso!', 'sucesso');
-      setNome(''); setPrecoCusto(''); setPrecoVenda(''); setQuantidadeEstoque('');
+      setNome(''); setPrecoCusto(''); setPrecoVenda(''); setQuantidadeEstoque(''); setMargem('');
       setEstoqueMinimo(5); setTamanho(''); setUnidadeMedida('un');
       carregarDados();
     } catch (error) { console.error(error); mostrarMensagem('Erro ao cadastrar produto.', 'erro'); }
@@ -163,20 +211,49 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     setEditTamanho(produto.tamanho || '');
     setEditUnidadeMedida(produto.unidade_medida);
     setEditEstoqueMinimo(produto.estoque_minimo || 5);
+
+    const m = produto.preco_custo > 0 ? ((produto.preco_venda - produto.preco_custo) / produto.preco_custo) * 100 : 0;
+    setEditMargem(m > 0 ? Number(m.toFixed(1)) : '');
+  };
+
+  const handleEditCustoChange = (val: number | '') => {
+    setEditPrecoCusto(val);
+    if (val !== '' && editMargem !== '') {
+      setEditPrecoVenda(Number((val * (1 + editMargem / 100)).toFixed(2)));
+    } else if (val !== '' && editPrecoVenda !== '') {
+      setEditMargem(Number((((editPrecoVenda - val) / val) * 100).toFixed(1)));
+    }
+  };
+
+  const handleEditMargemChange = (val: number | '') => {
+    setEditMargem(val);
+    if (val !== '' && editPrecoCusto !== '') {
+      setEditPrecoVenda(Number((editPrecoCusto * (1 + val / 100)).toFixed(2)));
+    }
+  };
+
+  const handleEditVendaChange = (val: number | '') => {
+    setEditPrecoVenda(val);
+    if (val !== '' && editPrecoCusto !== '') {
+      setEditMargem(Number((((val - editPrecoCusto) / editPrecoCusto) * 100).toFixed(1)));
+    }
   };
 
   const confirmarAjusteEstoque = async () => {
     if (!produtoParaAjuste || !ajusteQuantidade || !ajusteTipo) return mostrarMensagem('Preencha a quantidade e o tipo.', 'aviso');
 
-    const isSaida = ajusteTipo.includes('Saída') || ajusteTipo.includes('Negativa');
-    const novoEstoque = isSaida ? produtoParaAjuste.quantidade_estoque - Number(ajusteQuantidade) : produtoParaAjuste.quantidade_estoque + Number(ajusteQuantidade);
-
     try {
-      await supabase.from('produtos').update({ quantidade_estoque: novoEstoque }).eq('id', produtoParaAjuste.id);
-      await supabase.from('movimentacoes_estoque').insert([{
-        produto_id: produtoParaAjuste.id, quantidade: isSaida ? -Number(ajusteQuantidade) : Number(ajusteQuantidade),
-        tipo_movimento: ajusteTipo, motivo: ajusteMotivo || 'Ajuste Manual', atendente
-      }]);
+      const { error } = await supabase.rpc('registrar_ajuste_estoque', {
+        p_produto_id: produtoParaAjuste.id,
+        p_quantidade: Number(ajusteQuantidade),
+        p_tipo_movimento: ajusteTipo,
+        p_motivo: ajusteMotivo,
+        p_atendente: atendente,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') return mostrarMensagem('A migration de ajuste de estoque ainda não foi aplicada no Supabase.', 'aviso');
+        throw error;
+      }
       mostrarMensagem(`Estoque atualizado!`, 'sucesso');
       carregarDados();
     } catch (error) { console.error(error); mostrarMensagem('Erro ao atualizar.', 'erro'); } finally {
@@ -185,15 +262,17 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   };
 
   // ----- FUNÇÕES DO CARRINHO DE LOTE -----
-  const adicionarAoLote = (p: Produto) => {
+  const adicionarAoLote = (p: any) => {
     if (carrinhoLote.some(item => item.produtoId === p.id)) return;
     setCarrinhoLote([{
       produtoId: p.id,
       nome: p.nome,
       unidade_medida: p.unidade_medida,
       qtd: 1,
-      custoUnitario: p.preco_custo || 0,
-      precoVenda: p.preco_venda || 0
+      custoUnitario: p.tipoItem === 'insumo' ? p.preco_total_pago : (p.preco_custo || 0),
+      precoVenda: p.tipoItem === 'insumo' ? 0 : (p.preco_venda || 0),
+      tipoItem: p.tipoItem,
+      insumoData: p.tipoItem === 'insumo' ? { qtd_embalagem: p.qtd_embalagem, fator_correcao: p.fator_correcao } : undefined
     }, ...carrinhoLote]);
   };
 
@@ -215,7 +294,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     if (carrinhoLote.some(item => !item.qtd || Number(item.qtd) <= 0)) return mostrarMensagem('Qtd inválida no carrinho.', 'aviso');
 
     let vPix = 0, vDin = 0, vCred = 0, vDeb = 0, vTrans = 0, vPrazo = 0;
-    const metodosImediatos: string[] = [];
 
     if (modoPagamentoLote === 'unico') {
       if (metodoPagamentoLote === 'Conta a Pagar') {
@@ -227,7 +305,6 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         if (metodoPagamentoLote === 'Cartão de Crédito') vCred = totalCustoLote;
         if (metodoPagamentoLote === 'Cartão de Débito') vDeb = totalCustoLote;
         if (metodoPagamentoLote === 'Transferência') vTrans = totalCustoLote;
-        metodosImediatos.push(metodoPagamentoLote);
       }
     } else {
       if (totalPagoMistoLote < totalCustoLote) return mostrarMensagem(`Falta alocar ${formatarMoeda(faltaPagarMistoLote)} nos pagamentos!`, 'erro');
@@ -245,23 +322,28 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         if (p.metodo === 'Conta a Pagar') {
           vPrazo += val;
         } else {
-          if (p.metodo === 'PIX') { vPix += val; metodosImediatos.push('PIX'); }
-          if (p.metodo === 'Cartão de Crédito') { vCred += val; metodosImediatos.push('Cartão de Crédito'); }
-          if (p.metodo === 'Cartão de Débito') { vDeb += val; metodosImediatos.push('Cartão de Débito'); }
-          if (p.metodo === 'Transferência') { vTrans += val; metodosImediatos.push('Transferência'); }
+          if (p.metodo === 'PIX') vPix += val;
+          if (p.metodo === 'Cartão de Crédito') vCred += val;
+          if (p.metodo === 'Cartão de Débito') vDeb += val;
+          if (p.metodo === 'Transferência') vTrans += val;
           if (p.metodo === 'Dinheiro') {
             if (trocoRestante > 0) {
               if (val >= trocoRestante) { val -= trocoRestante; trocoRestante = 0; }
               else { trocoRestante -= val; val = 0; }
             }
             vDin += val;
-            if (val > 0) metodosImediatos.push('Dinheiro');
           }
         }
       });
     }
 
-    const valorImediatoTotal = vPix + vDin + vCred + vDeb + vTrans;
+    const pagamentosImediatos = [
+      ['PIX', vPix],
+      ['Dinheiro', vDin],
+      ['Cartão de Crédito', vCred],
+      ['Cartão de Débito', vDeb],
+      ['Transferência', vTrans],
+    ].filter(([, valorPago]) => Number(valorPago) > 0).map(([metodo, valorPago]) => ({ metodo, valor: valorPago }));
 
     if (vDin > 0 && !caixaAtivo) {
       return mostrarMensagem('Não é possível retirar dinheiro da gaveta com o caixa fechado.', 'erro');
@@ -269,77 +351,54 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
     setCarregando(true);
     try {
-      // 1. Gera um Código de Rastreio Único para essa transação de Lote
-      const loteId = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-      // 2. Atualiza Estoques e Preços
-      for (const item of carrinhoLote) {
-        const prod = produtos.find(p => p.id === item.produtoId);
-        if (!prod) continue;
-
-        const qtd = Number(item.qtd);
-        const novoEstoque = prod.quantidade_estoque + qtd;
-
-        await supabase.from('produtos').update({
-          quantidade_estoque: novoEstoque,
-          preco_custo: Number(item.custoUnitario || 0),
-          preco_venda: Number(item.precoVenda || 0)
-        }).eq('id', item.produtoId);
-
-        await supabase.from('movimentacoes_estoque').insert([{
-          produto_id: item.produtoId, quantidade: qtd, tipo_movimento: 'Entrada - Compra Lote',
-          motivo: `Abastecimento via Lote [LOTE-${loteId}]`, atendente
-        }]);
+      const loteId = gerarIdLote();
+      const itensParaRegistrar = carrinhoLote.map(item => {
+        if (item.tipoItem === 'produto') {
+          return {
+            produto_id: item.produtoId,
+            tipo_item: 'produto',
+            quantidade_estoque: Number(item.qtd),
+            preco_custo: Number(item.custoUnitario),
+            preco_venda: Number(item.precoVenda),
+            valor_linha: Number(item.qtd) * Number(item.custoUnitario),
+          };
+        }
+        const insumo = insumos.find(i => i.id === item.produtoId);
+        if (!insumo) throw new Error('Ingrediente do lote não encontrado. Recarregue a tela.');
+        const quantidadeEmbalagens = Number(item.qtd);
+        const valorLinha = quantidadeEmbalagens * Number(item.custoUnitario);
+        const compra = calcularCompraEmbalada({
+          quantidadeEmbalagens,
+          quantidadePorEmbalagem: insumo.qtd_embalagem,
+          valorTotalPago: valorLinha,
+          fatorCorrecao: insumo.fator_correcao,
+        });
+        return {
+          insumo_id: item.produtoId,
+          tipo_item: 'insumo',
+          quantidade_estoque: compra.quantidadeEstoque,
+          preco_custo: compra.custoUnitario,
+          preco_venda: 0,
+          valor_linha: valorLinha,
+        };
+      });
+      const { error } = await supabase.rpc('registrar_compra_lote_insumos', {
+        p_lote_id: loteId,
+        p_fornecedor_id: fornecedorLoteId || null,
+        p_itens: itensParaRegistrar,
+        p_total: totalCustoLote,
+        p_pagamentos_imediatos: pagamentosImediatos,
+        p_valor_prazo: vPrazo,
+        p_data_vencimento: vPrazo > 0 ? dataVencimentoLote : null,
+        p_caixa_id: caixaAtivo?.id || null,
+        p_atendente: atendente,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') return mostrarMensagem('A migration de compra em lote ainda não foi aplicada no Supabase.', 'aviso');
+        throw error;
       }
 
-      // 3. Registrar Transação Financeira com a Tag de Rastreio
-      if (totalCustoLote > 0) {
-        const dataHoje = new Date().toISOString().split('T')[0];
-
-        // Lançar valor imediato (PIX, Dinheiro, Cartões)
-        if (valorImediatoTotal > 0) {
-          const metodosUnicos = Array.from(new Set(metodosImediatos)).join(' + ');
-
-          await supabase.from('contas_pagar').insert([{
-            descricao: `Compra Lote [LOTE-${loteId}] (Pag. Imediato)`,
-            fornecedor_id: fornecedorLoteId || null,
-            valor: valorImediatoTotal,
-            data_vencimento: dataHoje,
-            data_pagamento: dataHoje,
-            status: 'Pago',
-            metodo_pagamento: metodosUnicos
-          }]);
-
-          if (vDin > 0 && caixaAtivo) {
-            await supabase.from('movimentacoes_caixa').insert([{
-              caixa_id: caixaAtivo.id, tipo: 'despesa', valor: vDin, descricao: `Pago: Compra Estoque (Lote)`
-            }]);
-          }
-
-          const valorBanco = vPix + vDeb + vTrans + vCred;
-          if (valorBanco > 0) {
-            const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-            if (banco) {
-              await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) - valorBanco }).eq('id', 1);
-            }
-          }
-        }
-
-        // Lançar valor a prazo (Contas a Pagar)
-        if (vPrazo > 0) {
-          await supabase.from('contas_pagar').insert([{
-            descricao: `Compra Lote [LOTE-${loteId}] (A Prazo)`,
-            fornecedor_id: fornecedorLoteId || null,
-            valor: vPrazo,
-            data_vencimento: dataVencimentoLote,
-            data_pagamento: null,
-            status: 'Pendente',
-            metodo_pagamento: null
-          }]);
-        }
-      }
-
-      mostrarMensagem('Lote processado e financeiro atualizado!', 'sucesso');
+      mostrarMensagem('Compra em lote registada com sucesso!', 'sucesso');
       setCarrinhoLote([]); setTermoBuscaLote(''); setModalLoteOpen(false);
       setModoPagamentoLote('unico'); setMetodoPagamentoLote('PIX'); setFornecedorLoteId(''); setDataVencimentoLote('');
       setPagamentosMistosLote([{ metodo: 'PIX', valor: '' }, { metodo: 'Conta a Pagar', valor: '' }]);
@@ -378,7 +437,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
             <div className="p-4 md:p-5 bg-gray-900 md:border-b flex justify-between items-center text-white shrink-0 pt-safe-top">
               <div>
                 <h3 className="text-lg font-black tracking-wide">📥 Compra (Lote)</h3>
-                <p className="text-xs text-gray-400 mt-0.5 hidden md:block">Adicione produtos, atualize custos e divida o pagamento.</p>
+                <p className="text-xs text-gray-400 mt-0.5 hidden md:block">Adicione produtos/insumos, atualize custos e divida o pagamento.</p>
               </div>
               <button onClick={() => { setModalLoteOpen(false); setCarrinhoLote([]); setAbaLoteMobile('busca'); }} className="text-gray-400 hover:text-red-500 font-black text-2xl px-2">✕</button>
             </div>
@@ -404,24 +463,29 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-              {/* ESQUERDA: BUSCA DE PRODUTOS */}
+              {/* ESQUERDA: BUSCA DE PRODUTOS E INSUMOS */}
               <div className={`${abaLoteMobile === 'busca' ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 border-r-0 lg:border-r flex-col bg-white h-full shrink-0 lg:shrink`}>
                 <div className="p-3 md:p-4 border-b bg-gray-50">
                   <input
                     type="text"
-                    placeholder="Pesquisar produto no catálogo..."
+                    placeholder="Pesquisar produto ou insumo..."
                     className="w-full p-3.5 md:p-2.5 border border-gray-300 rounded-lg outline-none text-base md:text-sm focus:ring-2 focus:ring-cafe-primary bg-white shadow-sm"
                     value={termoBuscaLote}
                     onChange={(e) => setTermoBuscaLote(e.target.value)}
                   />
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 pb-24 lg:pb-4 custom-scrollbar">
-                  {produtosFiltradosLote.map((p) => {
+                  {mixParaLote.map((p) => {
                     const noCarrinho = carrinhoLote.some(i => i.produtoId === p.id);
+                    const isInsumo = p.tipoItem === 'insumo';
+
                     return (
                       <div key={p.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 md:p-3 rounded-xl border transition gap-2 ${noCarrinho ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200 hover:border-blue-400 shadow-sm'}`}>
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-base md:text-sm block text-gray-800 truncate">{p.nome}</span>
+                          <div className="flex items-center gap-2">
+                              {isInsumo && <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Insumo</span>}
+                              <span className="font-bold text-base md:text-sm block text-gray-800 truncate">{p.nome}</span>
+                          </div>
                           <span className="text-xs text-gray-500 font-medium block mt-0.5">Estoque atual: <strong className="text-gray-700">{p.quantidade_estoque || 0}</strong> {p.unidade_medida}</span>
                         </div>
                         <button
@@ -434,7 +498,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                       </div>
                     );
                   })}
-                  {produtosFiltradosLote.length === 0 && <p className="text-center text-gray-400 italic text-sm mt-6">Produto não encontrado.</p>}
+                  {mixParaLote.length === 0 && <p className="text-center text-gray-400 italic text-sm mt-6">Item não encontrado no sistema.</p>}
                 </div>
 
                 {abaLoteMobile === 'busca' && carrinhoLote.length > 0 && (
@@ -461,27 +525,49 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                       <button onClick={() => setAbaLoteMobile('busca')} className="lg:hidden mt-4 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-bold text-xs">Voltar à Busca</button>
                     </div>
                   ) : (
-                    carrinhoLote.map(item => (
-                      <div key={item.produtoId} className="bg-white p-3.5 md:p-3 border rounded-xl shadow-sm relative group">
-                        <button onClick={() => removerDoLote(item.produtoId)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 font-black w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-red-50 rounded-lg transition">✕</button>
-                        <p className="font-bold text-sm mb-3 pr-10 text-gray-800">{item.nome}</p>
+                    carrinhoLote.map(item => {
+                        const isProduto = item.tipoItem === 'produto';
+                        const margemCalc = isProduto && Number(item.custoUnitario) > 0 && Number(item.precoVenda) > 0
+                            ? (((Number(item.precoVenda) - Number(item.custoUnitario)) / Number(item.custoUnitario)) * 100).toFixed(1)
+                            : 0;
 
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Qtd</label>
-                            <input type="number" min="1" value={item.qtd} onChange={e => atualizarLote(item.produtoId, 'qtd', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50 text-center" />
+                        return (
+                          <div key={item.produtoId} className="bg-white p-3.5 md:p-3 border rounded-xl shadow-sm relative group">
+                            <button onClick={() => removerDoLote(item.produtoId)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 font-black w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-red-50 rounded-lg transition">✕</button>
+                            <p className="font-bold text-sm mb-3 pr-10 text-gray-800">{item.nome}</p>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">{isProduto ? 'Qtd' : 'Qtd Emb.'}</label>
+                                <input type="number" min="1" value={item.qtd} onChange={e => atualizarLote(item.produtoId, 'qtd', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50 text-center" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block truncate" title={isProduto ? 'Custo (R$)' : 'Preço Pago Emb. (R$)'}>{isProduto ? 'Custo (R$)' : 'Pago na Emb.(R$)'}</label>
+                                <input type="number" min="0" value={item.custoUnitario} onChange={e => atualizarLote(item.produtoId, 'custoUnitario', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-700" />
+                              </div>
+                              {isProduto ? (
+                                <div>
+                                    <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Venda (R$)</label>
+                                    <input type="number" min="0" value={item.precoVenda} onChange={e => atualizarLote(item.produtoId, 'precoVenda', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-green-50 text-green-700" />
+                                </div>
+                              ) : (
+                                <div className="flex flex-col justify-end h-full pb-0.5">
+                                    <div className="flex items-center justify-center bg-gray-100 rounded-lg p-2.5 md:p-2">
+                                        <span className="text-[10px] text-gray-500 font-bold uppercase">Insumo Base</span>
+                                    </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Visualizador de Margem no Lote apenas para produtos de revenda */}
+                            {isProduto && (
+                                <div className="mt-2 text-right">
+                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">Margem (Markup): <span className={Number(margemCalc) > 0 ? "text-green-600" : "text-red-500"}>{margemCalc}%</span></span>
+                                </div>
+                            )}
                           </div>
-                          <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Custo (R$)</label>
-                            <input type="number" min="0" value={item.custoUnitario} onChange={e => atualizarLote(item.produtoId, 'custoUnitario', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-700" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 block">Venda (R$)</label>
-                            <input type="number" min="0" value={item.precoVenda} onChange={e => atualizarLote(item.produtoId, 'precoVenda', e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2.5 md:p-2 border rounded-lg text-base md:text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-green-50 text-green-700" />
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                        )
+                    })
                   )}
                 </div>
 
@@ -634,7 +720,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
         </div>
       )}
 
-      {/* Modal Edição */}
+      {/* Modal Edição (Com Calculadora de Margem) */}
       {produtoParaEditar && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-xl p-5 md:p-6 w-full max-w-lg border max-h-[90vh] overflow-y-auto">
@@ -663,14 +749,18 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="block text-sm font-bold mb-1 text-gray-700">Custo (R$)</label>
-                  <input type="number" className="w-full p-3 md:p-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm bg-gray-50" value={editPrecoCusto} onChange={(e) => setEditPrecoCusto(e.target.value === '' ? '' : Number(e.target.value))} />
+                  <input type="number" className="w-full p-3 md:p-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm bg-gray-50" value={editPrecoCusto} onChange={(e) => handleEditCustoChange(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-bold mb-1 text-gray-700">Venda (R$)</label>
-                  <input type="number" className="w-full p-3 md:p-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-400 text-base md:text-sm font-bold text-green-700 bg-green-50" value={editPrecoVenda} onChange={(e) => setEditPrecoVenda(e.target.value === '' ? '' : Number(e.target.value))} />
+                  <label className="block text-sm font-bold mb-1 text-blue-600">Margem (%)</label>
+                  <input type="number" className="w-full p-3 md:p-2 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm bg-blue-50 text-blue-700 font-bold" value={editMargem} onChange={(e) => handleEditMargemChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Ex: 100" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-bold mb-1 text-green-700">Venda (R$)</label>
+                  <input type="number" className="w-full p-3 md:p-2 border border-green-200 rounded-lg outline-none focus:ring-2 focus:ring-green-400 text-base md:text-sm font-bold text-green-700 bg-green-50" value={editPrecoVenda} onChange={(e) => handleEditVendaChange(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
 
@@ -721,11 +811,15 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-500 uppercase">Custo (R$)</label>
-              <input type="number" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white" value={precoCusto} onChange={(e) => setPrecoCusto(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0.00" />
+              <input type="number" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white" value={precoCusto} onChange={(e) => handleCustoChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0.00" />
             </div>
             <div className="flex-1">
-              <label className="text-xs font-bold text-gray-500 uppercase">Venda (R$)</label>
-              <input type="number" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white font-bold text-green-700" value={precoVenda} onChange={(e) => setPrecoVenda(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0.00" />
+              <label className="text-xs font-bold text-blue-600 uppercase">Margem (%)</label>
+              <input type="number" className="w-full p-3 md:p-2.5 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm bg-blue-50 text-blue-700 font-bold" value={margem} onChange={(e) => handleMargemChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder="100" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-green-700 uppercase">Venda (R$)</label>
+              <input type="number" className="w-full p-3 md:p-2.5 border border-green-300 rounded-lg outline-none focus:ring-2 focus:ring-green-400 text-base md:text-sm bg-green-50 font-bold text-green-800" value={precoVenda} onChange={(e) => handleVendaChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0.00" />
             </div>
           </div>
 

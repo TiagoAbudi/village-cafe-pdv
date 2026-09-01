@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { apurarPagamentos, type MetodoPagamento, type Pagamento } from '../lib/money';
 
-type Produto = { id: string; nome: string; preco_venda: number; tipo: string; is_receita?: boolean; quantidade_estoque: number };
+type Produto = { id: string; nome: string; preco_venda: number; preco_custo: number; tipo: string; is_receita?: boolean; quantidade_estoque: number };
 type ItemComanda = { id: string; produto_id: string; quantidade: number; preco_unitario: number; produtos: { nome: string } };
 type Comanda = { id: string; identificacao: string; nome_cliente: string; status: string; atendente: string; created_at: string; itens_comanda: ItemComanda[] };
 type PagamentoMisto = { metodo: string; valor: number | '' };
@@ -12,21 +13,19 @@ interface GestaoComandasProps {
 
 export default function GestaoComandas({ atendente }: GestaoComandasProps) {
     const [caixaAberto, setCaixaAberto] = useState<boolean | null>(null);
+    const [caixaId, setCaixaId] = useState<string | null>(null);
     const [comandas, setComandas] = useState<Comanda[]>([]);
     const [produtos, setProdutos] = useState<Produto[]>([]);
     const [carregando, setCarregando] = useState(true);
     const [feedback, setFeedback] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'aviso' | null }>({ msg: '', tipo: null });
 
-    // Estados Nova Comanda
     const [modalNova, setModalNova] = useState(false);
     const [novaIdentificacao, setNovaIdentificacao] = useState('');
     const [novoCliente, setNovoCliente] = useState('');
 
-    // Estados Gestão da Comanda (Adicionar Itens)
     const [comandaAberta, setComandaAberta] = useState<Comanda | null>(null);
     const [quantidadeAdd] = useState<number | ''>(1);
 
-    // Estados Checkout (Pagamento)
     const [modalCheckout, setModalCheckout] = useState(false);
     const [modoPagamento, setModoPagamento] = useState<'unico' | 'misto'>('unico');
     const [metodoUnico, setMetodoUnico] = useState('PIX');
@@ -37,6 +36,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         { metodo: 'PIX', valor: '' }, { metodo: 'Dinheiro', valor: '' }
     ]);
     const [confirmacao, setConfirmacao] = useState<{ visivel: boolean; titulo: string; msg: string; onConfirm: () => void } | null>(null);
+    const [finalizando, setFinalizando] = useState(false);
 
     const [buscaProduto, setBuscaProduto] = useState('');
 
@@ -63,6 +63,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
             return;
         }
         setCaixaAberto(true);
+        setCaixaId(caixaData.id);
 
         const { data: comandasData } = await supabase
             .from('comandas')
@@ -83,10 +84,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         if (!silencioso) setCarregando(false);
     };
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { carregarDados(); }, []);
-
-    // ---------- FUNÇÕES DE COMANDA ----------
 
     const criarComanda = async () => {
         if (!novaIdentificacao) return mostrarMensagem('Informe a identificação (ex: Mesa 1).', 'aviso');
@@ -103,6 +101,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
     const adicionarItem = async (produto: Produto) => {
         if (!comandaAberta) return;
+        if (!caixaId) return mostrarMensagem('Nenhum caixa aberto foi identificado. Recarregue a tela.', 'erro');
         const qtdAdicionar = Number(quantidadeAdd) || 1;
 
         const itemExistente = comandaAberta.itens_comanda.find(item => item.produto_id === produto.id);
@@ -158,8 +157,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         }
     };
 
-    // ---------- FUNÇÕES DE CHECKOUT ----------
-
     const subtotalComandaAberta = useMemo(() => {
         return comandaAberta?.itens_comanda.reduce((acc, item) => acc + (item.preco_unitario * item.quantidade), 0) || 0;
     }, [comandaAberta]);
@@ -202,94 +199,50 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
 
     const finalizarVenda = async () => {
         if (!comandaAberta) return;
-        if (modoPagamento === 'misto' && totalPagoMisto < totalComDesconto) return mostrarMensagem(`Falta receber ${formatarMoeda(faltaPagarMisto)}!`, 'erro');
-
-        let vPix = 0, vDin = 0, vCred = 0, vDeb = 0;
-
-        if (modoPagamento === 'unico') {
-            vPix = metodoUnico === 'PIX' ? totalComDesconto : 0;
-            vCred = metodoUnico === 'Cartão de Crédito' ? totalComDesconto : 0;
-            vDeb = metodoUnico === 'Cartão de Débito' ? totalComDesconto : 0;
-            vDin = metodoUnico === 'Dinheiro' ? totalComDesconto : 0;
-        } else {
-            let trocoRestante = trocoMisto;
-            pagamentosMistos.forEach(p => {
-                let val = Number(p.valor) || 0;
-                if (p.metodo === 'PIX') vPix += val;
-                if (p.metodo === 'Cartão de Crédito') vCred += val;
-                if (p.metodo === 'Cartão de Débito') vDeb += val;
-                if (p.metodo === 'Dinheiro') {
-                    if (trocoRestante > 0) {
-                        if (val >= trocoRestante) { val -= trocoRestante; trocoRestante = 0; }
-                        else { trocoRestante -= val; val = 0; }
-                    }
-                    vDin += val;
-                }
-            });
-        }
-
-        const metodosStr = modoPagamento === 'unico' ? metodoUnico : Array.from(new Set(pagamentosMistos.map(p => p.metodo))).join(' + ');
+        if (valorDesconto < 0 || valorDesconto > subtotalComandaAberta) return mostrarMensagem('O desconto deve estar entre zero e o subtotal.', 'aviso');
+        const pagamentos: Pagamento[] = modoPagamento === 'unico'
+            ? [{
+                metodo: metodoUnico as MetodoPagamento,
+                valor: metodoUnico === 'Dinheiro' ? Number(valorRecebidoDinheiro) : totalComDesconto,
+            }]
+            : pagamentosMistos.map(p => ({ metodo: p.metodo as MetodoPagamento, valor: Number(p.valor) || 0 }));
+        const pagamento = apurarPagamentos(totalComDesconto, pagamentos);
+        if (!pagamento.aprovado) return mostrarMensagem(pagamento.erro || 'Pagamento inválido.', 'erro');
+        setFinalizando(true);
 
         try {
-            const { data: vendaCriada, error: erroVenda } = await supabase.from('vendas').insert([{
-                identificacao_pedido: `Comanda: ${comandaAberta.identificacao}`,
-                total: totalComDesconto,
-                desconto: valorDesconto,
-                metodo_pagamento: metodosStr,
-                valor_pix: vPix,
-                valor_dinheiro: vDin,
-                valor_cartao_credito: vCred,
-                valor_cartao_debito: vDeb,
-                atendente
-            }]).select().single();
-
+            const pagamentosRegistrados = [
+                ['PIX', pagamento.pix],
+                ['Dinheiro', pagamento.dinheiro],
+                ['Cartão de Crédito', pagamento.credito],
+                ['Cartão de Débito', pagamento.debito],
+                ['Transferência', pagamento.transferencia],
+            ].filter(([, valor]) => Number(valor) > 0).map(([metodo, valor]) => ({ metodo, valor }));
+            const itensParaInserir = comandaAberta.itens_comanda.map(item => ({
+                produto_id: item.produto_id,
+                quantidade: item.quantidade,
+                preco_unitario: item.preco_unitario,
+                custo_unitario: produtos.find(produto => produto.id === item.produto_id)?.preco_custo || 0,
+            }));
+            const { error: erroVenda } = await supabase.rpc('registrar_venda', {
+                p_caixa_id: caixaId,
+                p_identificacao_pedido: `Comanda: ${comandaAberta.identificacao}`,
+                p_total: totalComDesconto,
+                p_desconto: valorDesconto,
+                p_pagamentos: pagamentosRegistrados,
+                p_atendente: atendente,
+                p_itens: itensParaInserir,
+            });
             if (erroVenda) throw erroVenda;
 
-            for (const item of comandaAberta.itens_comanda) {
-                await supabase.from('itens_venda').insert([{ venda_id: vendaCriada.id, produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario }]);
-                const isReceita = produtos.find(p => p.id === item.produto_id)?.is_receita;
-
-                if (isReceita) {
-                    const { data: ficha } = await supabase.from('fichas_tecnicas').select('id').eq('produto_venda_id', item.produto_id).single();
-                    if (ficha) {
-                        const { data: ingredientes } = await supabase.from('ficha_ingredientes').select('*').eq('ficha_tecnica_id', ficha.id);
-                        if (ingredientes) {
-                            for (const ing of ingredientes) {
-                                const qtdDescontar = Number(ing.quantidade_necessaria) * Number(item.quantidade);
-                                const { data: prodBase } = await supabase.from('produtos').select('quantidade_estoque').eq('id', ing.ingrediente_id).single();
-                                if (prodBase) {
-                                    await supabase.from('produtos').update({ quantidade_estoque: Number(prodBase.quantidade_estoque) - qtdDescontar }).eq('id', ing.ingrediente_id);
-                                    await supabase.from('movimentacoes_estoque').insert([{ produto_id: ing.ingrediente_id, quantidade: -qtdDescontar, tipo_movimento: 'Saída - Produção', motivo: `Comanda ${comandaAberta.identificacao}`, atendente }]);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    const { data: prodBase } = await supabase.from('produtos').select('quantidade_estoque').eq('id', item.produto_id).single();
-                    if (prodBase) {
-                        await supabase.from('produtos').update({ quantidade_estoque: Number(prodBase.quantidade_estoque) - Number(item.quantidade) }).eq('id', item.produto_id);
-                        await supabase.from('movimentacoes_estoque').insert([{ produto_id: item.produto_id, quantidade: -Number(item.quantidade), tipo_movimento: 'Saída - Venda', motivo: `Comanda ${comandaAberta.identificacao}`, atendente }]);
-                    }
-                }
-            }
-
             await supabase.from('comandas').update({ status: 'fechada' }).eq('id', comandaAberta.id);
-
-            // --- NOVO: ALIMENTA O SALDO DIGITAL DO BANCO ---
-            const totalBanco = vPix + vCred + vDeb;
-            if (totalBanco > 0) {
-                const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-                if (banco) {
-                    await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + totalBanco }).eq('id', 1);
-                }
-            }
-            // ------------------------------------------------
 
             mostrarMensagem('Venda finalizada e estoque atualizado!', 'sucesso');
             setModalCheckout(false); setComandaAberta(null);
             carregarDados(true);
 
         } catch (error) { mostrarMensagem('Erro ao finalizar venda.', 'erro'); console.error(error); }
+        finally { setFinalizando(false); }
     };
 
     const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -301,7 +254,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         <div className="max-w-6xl mx-auto p-4 md:p-6 bg-cafe-card rounded-lg shadow-md border border-cafe-secondary/20 my-4 md:my-8 relative">
             {feedback.tipo && (<div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded shadow-lg ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : feedback.tipo === 'erro' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}><span className="font-semibold">{feedback.msg}</span></div>)}
 
-            {/* Modal Nova Comanda */}
             {modalNova && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
@@ -318,13 +270,9 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                 </div>
             )}
 
-            {/* Modal Gestão da Comanda (Adicionar Itens) */}
             {comandaAberta && !modalCheckout && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4">
-                    {/* Alterado para flex-col e h-[95vh] para gerenciar altura dinamicamente */}
                     <div className="bg-white rounded-lg shadow-2xl p-4 md:p-6 w-full max-w-4xl h-[95vh] flex flex-col">
-
-                        {/* Header Modal */}
                         <div className="flex justify-between items-center mb-2 border-b pb-2">
                             <div>
                                 <h3 className="text-2xl font-black text-cafe-primary">{comandaAberta.identificacao}</h3>
@@ -333,7 +281,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             <button onClick={() => setComandaAberta(null)} className="text-gray-400 hover:text-red-500 font-bold text-2xl px-2">✕</button>
                         </div>
 
-                        {/* Top Section: Produtos Disponíveis (Flex-1 para dividir tela) */}
                         <div className="flex flex-col min-h-[35%] flex-1 border-b pb-2 mb-2">
                             <input
                                 type="text"
@@ -342,7 +289,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                                 onChange={(e) => setBuscaProduto(e.target.value)}
                                 className="w-full p-3 border rounded-lg mb-2 outline-none focus:ring-2 focus:ring-cafe-primary text-base flex-shrink-0 bg-gray-50"
                             />
-                            {/* Scroll da lista de produtos */}
                             <div className="space-y-2 overflow-y-auto flex-1 pr-1">
                                 {produtosFiltrados.map(produto => {
                                     const semEstoque = !produto.is_receita && produto.quantidade_estoque <= 0;
@@ -362,7 +308,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                                                     )}
                                                 </div>
                                             </div>
-                                            {/* Touch Target maior no celular */}
                                             <button onClick={() => adicionarItem(produto)} disabled={semEstoque} className={`flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full font-bold text-xl flex items-center justify-center transition shadow-sm ${semEstoque ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-cafe-primary text-white hover:bg-cafe-dark active:scale-95'}`}>+</button>
                                         </div>
                                     );
@@ -370,7 +315,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             </div>
                         </div>
 
-                        {/* Bottom Section: Itens na Comanda (Flex-1 para dividir tela) */}
                         <div className="flex flex-col min-h-[30%] flex-1 bg-gray-50 border rounded p-2">
                             <h4 className="text-sm font-bold text-gray-500 mb-2 uppercase tracking-wide">Itens Lançados</h4>
                             <div className="flex-1 overflow-y-auto">
@@ -379,14 +323,12 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                                 ) : (
                                     <ul className="space-y-3 pr-1">
                                         {comandaAberta.itens_comanda.map(item => (
-                                            // Layout flex responsivo: coluna no celular apertado, linha no PC
                                             <li key={item.id} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                                 <div className="flex-1">
                                                     <div className="font-semibold text-sm md:text-base">{item.produtos?.nome}</div>
                                                     <div className="text-xs text-gray-500">{formatarMoeda(item.preco_unitario)} cada</div>
                                                 </div>
 
-                                                {/* Controles de Quantidade adaptados */}
                                                 <div className="flex items-center gap-1 sm:gap-2 bg-gray-50 border rounded-lg p-1 w-full sm:w-auto justify-between sm:justify-start">
                                                     <button onClick={() => alterarQuantidadeItem(item.id, item.quantidade, -1)} className="w-10 h-10 sm:w-8 sm:h-8 rounded bg-white shadow-sm border hover:bg-gray-100 font-bold active:bg-gray-200">-</button>
                                                     <span className="font-bold w-6 text-center">{item.quantidade}</span>
@@ -405,7 +347,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             </div>
                         </div>
 
-                        {/* Footer Ações */}
                         <div className="pt-4 flex flex-col md:flex-row justify-between items-center gap-4 mt-2">
                             <button onClick={confirmarExclusao} className="w-full md:w-auto text-red-500 font-bold hover:bg-red-50 px-4 py-3 md:py-2 rounded transition order-3 md:order-1 border md:border-none border-red-200">
                                 Excluir Comanda
@@ -424,7 +365,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                 </div>
             )}
 
-            {/* Modal Checkout (Pagamento Avançado) */}
             {modalCheckout && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
                     <div className="bg-white rounded-lg shadow-2xl p-4 md:p-6 w-full max-w-md border-t-8 border-blue-600 max-h-[95vh] overflow-y-auto">
@@ -496,12 +436,11 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                             </div>
                         )}
 
-                        <button onClick={finalizarVenda} className="w-full bg-green-600 text-white font-black text-xl py-4 rounded-lg shadow-lg hover:bg-green-700 active:scale-95 transition">CONFIRMAR E FECHAR MESA</button>
+                        <button onClick={finalizarVenda} disabled={finalizando} className="w-full bg-green-600 text-white font-black text-xl py-4 rounded-lg shadow-lg hover:bg-green-700 active:scale-95 transition disabled:cursor-not-allowed disabled:opacity-70">{finalizando ? 'FINALIZANDO...' : 'CONFIRMAR E FECHAR MESA'}</button>
                     </div>
                 </div>
             )}
 
-            {/* TELA PRINCIPAL (GRID DAS COMANDAS) */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-cafe-secondary/30 pb-4 gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-cafe-primary">Mesas e Comandas</h2>
@@ -539,7 +478,6 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
                 )}
             </div>
 
-            {/* Modal Confirmação de Exclusão */}
             {confirmacao?.visivel && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4 animate-fade-in">
                     <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm text-center">

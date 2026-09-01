@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { dataLocalISO, dataRecorrente } from '../lib/datas';
+import { valoresIguais } from '../lib/money';
 
 type Conta = {
     id: string;
@@ -10,6 +12,8 @@ type Conta = {
     data_pagamento: string | null;
     status: string;
     metodo_pagamento?: string;
+    valor_original?: number | null;
+    pagamentos?: { metodo: string; valor: number }[] | null;
     fornecedores: { nome: string } | null;
 };
 
@@ -104,11 +108,12 @@ export default function ContasPagarModulo() {
         if (caixaData) {
             setCaixaAtivo(caixaData);
 
-            const { data: vendasData } = await supabase
-                .from('vendas')
-                .select('total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento, data_venda, id')
-                .gte('data_venda', caixaData.data_abertura);
-            setVendasHoje(vendasData || []);
+            const selecaoVendas = 'total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento, data_venda, id';
+            const [vendasVinculadas, vendasLegadas] = await Promise.all([
+                supabase.from('vendas').select(selecaoVendas).eq('caixa_id', caixaData.id).neq('status', 'Cancelada'),
+                supabase.from('vendas').select(selecaoVendas).is('caixa_id', null).gte('data_venda', caixaData.data_abertura).neq('status', 'Cancelada'),
+            ]);
+            setVendasHoje([...(vendasVinculadas.data || []), ...(vendasLegadas.data || [])]);
 
             const { data: movsData } = await supabase
                 .from('movimentacoes_caixa')
@@ -179,7 +184,7 @@ export default function ContasPagarModulo() {
 
         const totalPendente = contasPendentes.reduce((acc, c) => acc + c.valor, 0);
 
-        const hojeStr = new Date().toISOString().split('T')[0];
+        const hojeStr = dataLocalISO();
         const contasPagasHoje = contasPagas.filter(c => c.data_pagamento === hojeStr);
         const totalPagasHoje = contasPagasHoje.reduce((acc, c) => acc + c.valor, 0);
 
@@ -202,11 +207,13 @@ export default function ContasPagarModulo() {
         setCaixaSelecionado(caixa);
         try {
             const dataFimFiltro = caixa.data_fechamento || new Date().toISOString();
-
-            const { data: vendas } = await supabase.from('vendas').select('*').gte('data_venda', caixa.data_abertura).lte('data_venda', dataFimFiltro).order('data_venda', { ascending: true });
+            const [vendasVinculadas, vendasLegadas] = await Promise.all([
+                supabase.from('vendas').select('*').eq('caixa_id', caixa.id).neq('status', 'Cancelada'),
+                supabase.from('vendas').select('*').is('caixa_id', null).gte('data_venda', caixa.data_abertura).lte('data_venda', dataFimFiltro).neq('status', 'Cancelada'),
+            ]);
             const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixa.id).order('data_movimento', { ascending: true });
 
-            const vHoje = vendas || [];
+            const vHoje = [...(vendasVinculadas.data || []), ...(vendasLegadas.data || [])].sort((a, b) => new Date(a.data_venda).getTime() - new Date(b.data_venda).getTime());
             const mHoje = movs || [];
 
             const listaSuprimentos = mHoje.filter(m => m.tipo === 'suprimento');
@@ -413,6 +420,7 @@ export default function ContasPagarModulo() {
                     descricao,
                     fornecedor_id: fornecedorId || null,
                     valor: Number(valor),
+                    valor_original: Number(valor),
                     data_vencimento: dataVencimento,
                     status: 'Pendente'
                 });
@@ -422,16 +430,16 @@ export default function ContasPagarModulo() {
                 const offsetMesInicial = diaAtual > diaEscolhido ? 1 : 0;
 
                 for (let i = 0; i < loops; i++) {
-                    const alvoDate = new Date(hoje.getFullYear(), hoje.getMonth() + offsetMesInicial + i, diaEscolhido);
-                    const anoStr = alvoDate.getFullYear();
-                    const mesStr = String(alvoDate.getMonth() + 1).padStart(2, '0');
-                    const diaStr = String(alvoDate.getDate()).padStart(2, '0');
+                    const mesAlvo = hoje.getMonth() + offsetMesInicial + i;
+                    const anoAlvo = hoje.getFullYear() + Math.floor(mesAlvo / 12);
+                    const mesNormalizado = ((mesAlvo % 12) + 12) % 12;
 
                     payloads.push({
                         descricao: `${descricao} (${i + 1}/${loops})`,
                         fornecedor_id: fornecedorId || null,
-                        valor: Number(valor),
-                        data_vencimento: `${anoStr}-${mesStr}-${diaStr}`,
+                    valor: Number(valor),
+                    valor_original: Number(valor),
+                        data_vencimento: dataRecorrente(anoAlvo, mesNormalizado, diaEscolhido),
                         status: 'Pendente'
                     });
                 }
@@ -467,6 +475,7 @@ export default function ContasPagarModulo() {
                 descricao: editDescricao,
                 fornecedor_id: editFornecedorId || null,
                 valor: Number(editValor),
+                ...(contaParaEditar.status === 'Pendente' ? { valor_original: Number(editValor) } : {}),
                 data_vencimento: editDataVencimento
             }).eq('id', contaParaEditar.id);
 
@@ -501,63 +510,35 @@ export default function ContasPagarModulo() {
         const valorFinal = Number(valorBaixa);
         if (valorFinal <= 0) return mostrarMensagem('O valor de pagamento deve ser maior que zero.', 'aviso');
 
-        let stringMetodos = '';
-        let totalDinheiro = 0;
-        let totalBanco = 0;
+        let pagamentosRegistrados: { metodo: string; valor: number }[];
 
         if (modoPagamentoBaixa === 'unico') {
-            stringMetodos = metodoPagamentoBaixa;
-            if (metodoPagamentoBaixa === 'Dinheiro') {
-                totalDinheiro = valorFinal;
-            } else {
-                totalBanco = valorFinal;
-            }
+            pagamentosRegistrados = [{ metodo: metodoPagamentoBaixa, valor: valorFinal }];
         } else {
             const totalPagoMisto = pagamentosMistosBaixa.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
 
             // Para Contas a Pagar, a soma dos parciais tem que bater cravado com o valorFinal editável.
-            if (totalPagoMisto !== valorFinal) {
+            if (!valoresIguais(totalPagoMisto, valorFinal)) {
                 return mostrarMensagem(`A soma das formas de pagamento deve ser exatamente ${formatarMoeda(valorFinal)}.`, 'aviso');
             }
 
             const metodosUsados = pagamentosMistosBaixa.filter(p => Number(p.valor) > 0);
-            stringMetodos = Array.from(new Set(metodosUsados.map(p => p.metodo))).join(' + ');
-
-            metodosUsados.forEach(p => {
-                const val = Number(p.valor);
-                if (p.metodo === 'Dinheiro') totalDinheiro += val;
-                else totalBanco += val;
-            });
+            pagamentosRegistrados = metodosUsados.map(p => ({ metodo: p.metodo, valor: Number(p.valor) }));
         }
 
-        if (totalDinheiro > 0 && !caixaAtivo) {
+        const temDinheiro = pagamentosRegistrados.some(p => p.metodo === 'Dinheiro');
+        if (temDinheiro && !caixaAtivo) {
             return mostrarMensagem('Não é possível pagar em dinheiro (físico) com o caixa fechado.', 'erro');
         }
 
         try {
-            const dataHoje = new Date().toISOString().split('T')[0];
-
-            if (totalDinheiro > 0 && caixaAtivo) {
-                await supabase.from('movimentacoes_caixa').insert([{
-                    caixa_id: caixaAtivo.id,
-                    tipo: 'despesa',
-                    valor: totalDinheiro,
-                    descricao: `Pago (${modoPagamentoBaixa === 'misto' ? 'Parcial' : 'Integral'}): ${contaParaPagar.descricao}`
-                }]);
-            }
-
-            if (totalBanco > 0) {
-                const saldoAtualizado = saldoDigital - totalBanco;
-                await supabase.from('conta_bancaria').update({ saldo: saldoAtualizado }).eq('id', 1);
-            }
-
-            // Atualizamos o valor da conta no BD para refletir o que realmente foi pago (caso de juros/desconto)
-            await supabase.from('contas_pagar').update({
-                status: 'Pago',
-                data_pagamento: dataHoje,
-                metodo_pagamento: stringMetodos,
-                valor: valorFinal
-            }).eq('id', contaParaPagar.id);
+            const { error: erroConta } = await supabase.rpc('baixar_conta_pagar', {
+                p_conta_id: contaParaPagar.id,
+                p_valor: valorFinal,
+                p_pagamentos: pagamentosRegistrados,
+                p_caixa_id: caixaAtivo?.id || null,
+            });
+            if (erroConta) throw erroConta;
 
             mostrarMensagem('Conta marcada como PAGA com sucesso!', 'sucesso');
             carregarDados();
@@ -570,80 +551,26 @@ export default function ContasPagarModulo() {
         }
     };
 
-    // --- NOVA FUNÇÃO DE ESTORNO DE CONTA (INCLUI REVERSÃO DE LOTE E BANCO) ---
+    // Cancela sem apagar o histórico; o Supabase executa o estorno financeiro em transação.
     const confirmarExclusao = async () => {
         if (!contaParaApagar) return;
         try {
-            // 1. REVERTER DINHEIRO SE A CONTA JÁ ESTAVA PAGA
-            if (contaParaApagar.status === 'Pago') {
-                const metodos = contaParaApagar.metodo_pagamento || '';
-
-                if (metodos.includes('+')) {
-                    // Para estorno misto, devolve tudo pro Banco e avisa
-                    const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-                    if (banco) {
-                        await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + contaParaApagar.valor }).eq('id', 1);
-                    }
-                    setTimeout(() => mostrarMensagem('Aviso: Conta mista estornada! O valor total foi devolvido ao Saldo Digital.', 'aviso'), 1000);
-                } else if (metodos === 'Dinheiro') {
-                    if (caixaAtivo) {
-                        await supabase.from('movimentacoes_caixa').insert([{
-                            caixa_id: caixaAtivo.id,
-                            tipo: 'suprimento',
-                            valor: contaParaApagar.valor,
-                            descricao: `Estorno de Despesa: ${contaParaApagar.descricao}`
-                        }]);
-                    } else {
-                        mostrarMensagem('Caixa fechado! O estorno em dinheiro não afetou a gaveta atual.', 'aviso');
-                    }
-                } else {
-                    // Abrange qualquer meio digital: PIX, Cartão de Crédito, Débito e Transferência
-                    const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-                    if (banco) {
-                        await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + contaParaApagar.valor }).eq('id', 1);
-                    }
+            const { error } = await supabase.rpc('cancelar_conta_pagar', {
+                p_conta_id: contaParaApagar.id,
+                p_caixa_id: caixaAtivo?.id || null,
+                p_motivo: 'Cancelamento realizado pelo financeiro',
+            });
+            if (error) {
+                if (error.code === 'PGRST202') {
+                    return mostrarMensagem('A migration de cancelamento de contas ainda não foi aplicada no Supabase.', 'aviso');
                 }
+                throw error;
             }
-
-            // 2. REVERTER ESTOQUE SE FOI COMPRA DE LOTE
-            const loteMatch = contaParaApagar.descricao.match(/\[LOTE-(.*?)\]/);
-            if (loteMatch) {
-                const loteId = loteMatch[1];
-                // Verifica se já estornou (pois pode haver 2 contas de pagamentos diferentes para o mesmo lote)
-                const { data: jaEstornado } = await supabase.from('movimentacoes_estoque').select('id').eq('motivo', `Estorno Lote [LOTE-${loteId}]`).limit(1);
-
-                if (!jaEstornado || jaEstornado.length === 0) {
-                    // Busca quais foram os produtos inseridos nesse lote original
-                    const { data: movs } = await supabase.from('movimentacoes_estoque').select('produto_id, quantidade').eq('motivo', `Abastecimento via Lote [LOTE-${loteId}]`);
-
-                    if (movs && movs.length > 0) {
-                        for (const m of movs) {
-                            const { data: p } = await supabase.from('produtos').select('quantidade_estoque').eq('id', m.produto_id).single();
-                            if (p) {
-                                // Subtrai o que foi comprado do estoque
-                                await supabase.from('produtos').update({ quantidade_estoque: p.quantidade_estoque - m.quantidade }).eq('id', m.produto_id);
-
-                                // Registra a movimentação de saída do estorno
-                                await supabase.from('movimentacoes_estoque').insert([{
-                                    produto_id: m.produto_id,
-                                    quantidade: -m.quantidade,
-                                    tipo_movimento: 'Saída - Estorno Compra',
-                                    motivo: `Estorno Lote [LOTE-${loteId}]`,
-                                    atendente: 'Sistema'
-                                }]);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. APAGAR A CONTA FINALMENTE
-            await supabase.from('contas_pagar').delete().eq('id', contaParaApagar.id);
-            mostrarMensagem('Conta removida e estornada com sucesso!', 'sucesso');
+            mostrarMensagem('Conta cancelada e estorno financeiro registado!', 'sucesso');
             carregarDados();
         } catch (error) {
             console.error(error);
-            mostrarMensagem('Erro ao excluir conta.', 'erro');
+            mostrarMensagem('Erro ao cancelar a conta.', 'erro');
         } finally {
             setContaParaApagar(null);
         }
@@ -1005,16 +932,16 @@ export default function ContasPagarModulo() {
                 </div>
             )}
 
-            {/* Modal de Exclusão/Estorno */}
+            {/* Modal de Cancelamento/Estorno */}
             {contaParaApagar && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border text-center">
                         <div className="text-red-500 text-5xl mb-3">⚠️</div>
-                        <h3 className="text-xl font-black text-cafe-dark mb-2">Excluir/Estornar Conta</h3>
-                        <p className="text-gray-600 mb-6 text-sm px-2">Tem certeza que deseja apagar esta conta? (O valor será estornado na gaveta ou banco se já foi paga).</p>
+                        <h3 className="text-xl font-black text-cafe-dark mb-2">Cancelar/Estornar Conta</h3>
+                        <p className="text-gray-600 mb-6 text-sm px-2">A conta será mantida no histórico como cancelada. Se já estiver paga, o valor será estornado na gaveta ou banco.</p>
                         <div className="flex gap-3">
                             <button onClick={() => setContaParaApagar(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 py-3 rounded-xl font-bold transition">Cancelar</button>
-                            <button onClick={confirmarExclusao} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-md transition active:scale-95">Excluir</button>
+                            <button onClick={confirmarExclusao} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-md transition active:scale-95">Cancelar conta</button>
                         </div>
                     </div>
                 </div>

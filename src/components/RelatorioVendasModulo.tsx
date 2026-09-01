@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { dataLocalISO, limitesDoDiaLocal } from '../lib/datas';
 
 // Tipagens
 type Venda = {
@@ -35,12 +36,13 @@ const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 export default function RelatorioVendasModulo() {
     const hojeDate = new Date();
 
-    // Filtros de Data (Padrão: Últimos 10 dias)
+    // Filtros de Data (padrão: últimos 10 dias, incluindo hoje)
     const [dataInicio, setDataInicio] = useState(() => {
         const d = new Date();
-        return d.toISOString().split('T')[0];
+        d.setDate(d.getDate() - 9);
+        return dataLocalISO(d);
     });
-    const [dataFim, setDataFim] = useState(() => hojeDate.toISOString().split('T')[0]);
+    const [dataFim, setDataFim] = useState(() => dataLocalISO(hojeDate));
 
     // Estados do DatePicker Customizado
     const [popoverInicioAberto, setPopoverInicioAberto] = useState(false);
@@ -118,11 +120,11 @@ export default function RelatorioVendasModulo() {
     };
 
     // Busca principal de Vendas
-    const buscarVendas = async (pagina = 1) => {
+    const buscarVendas = useCallback(async (pagina = 1) => {
         setCarregando(true);
         try {
-            const dataFimAjustada = `${dataFim}T23:59:59.999Z`;
-            const dataInicioAjustada = `${dataInicio}T00:00:00.000Z`;
+            const { fim: dataFimAjustada } = limitesDoDiaLocal(dataFim);
+            const { inicio: dataInicioAjustada } = limitesDoDiaLocal(dataInicio);
 
             const from = (pagina - 1) * itensPorPagina;
             const to = from + itensPorPagina - 1;
@@ -132,6 +134,7 @@ export default function RelatorioVendasModulo() {
                 .select('*', { count: 'exact' })
                 .gte('data_venda', dataInicioAjustada)
                 .lte('data_venda', dataFimAjustada)
+                .neq('status', 'Cancelada')
                 .order(ordenacao.coluna, { ascending: ordenacao.direcao === 'asc' })
                 .range(from, to);
 
@@ -146,14 +149,14 @@ export default function RelatorioVendasModulo() {
         } finally {
             setCarregando(false);
         }
-    };
+    }, [dataInicio, dataFim, ordenacao, itensPorPagina]);
 
     // Busca os totais gerais do período
     useEffect(() => {
         const carregarTotaisPeriodo = async () => {
             try {
-                const dataFimAjustada = `${dataFim}T23:59:59.999Z`;
-                const dataInicioAjustada = `${dataInicio}T00:00:00.000Z`;
+                const { fim: dataFimAjustada } = limitesDoDiaLocal(dataFim);
+                const { inicio: dataInicioAjustada } = limitesDoDiaLocal(dataInicio);
 
                 let todasVendasTotais: any[] = [];
                 let de = 0;
@@ -166,6 +169,7 @@ export default function RelatorioVendasModulo() {
                         .select('total, valor_dinheiro, valor_pix, valor_cartao_credito, valor_cartao_debito, metodo_pagamento')
                         .gte('data_venda', dataInicioAjustada)
                         .lte('data_venda', dataFimAjustada)
+                        .neq('status', 'Cancelada')
                         .range(de, de + limite - 1);
 
                     if (error) throw error;
@@ -242,8 +246,8 @@ export default function RelatorioVendasModulo() {
 
      
     useEffect(() => {
-        buscarVendas(1);
-    }, [dataInicio, dataFim, ordenacao, itensPorPagina]);
+        void buscarVendas(1);
+    }, [buscarVendas]);
 
     const totalPaginas = Math.ceil(totalRegistros / itensPorPagina);
 

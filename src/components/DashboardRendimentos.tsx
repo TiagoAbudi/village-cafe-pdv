@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { dataLocalISO, limitesDoDiaLocal } from '../lib/datas';
 
 type ProdutoVendido = { nome: string; quantidade: number; faturamento: number; custo: number; lucro: number };
 
@@ -8,8 +9,8 @@ const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
 export default function DashboardRendimentos() {
     const hojeDate = new Date();
-    const hojeStr = hojeDate.toISOString().split('T')[0];
-    const primeiroDiaDoMesStr = new Date(hojeDate.getFullYear(), hojeDate.getMonth(), 1).toISOString().split('T')[0];
+    const hojeStr = dataLocalISO(hojeDate);
+    const primeiroDiaDoMesStr = dataLocalISO(new Date(hojeDate.getFullYear(), hojeDate.getMonth(), 1));
 
     const [dataInicio, setDataInicio] = useState(primeiroDiaDoMesStr);
     const [dataFim, setDataFim] = useState(hojeStr);
@@ -27,11 +28,11 @@ export default function DashboardRendimentos() {
 
     const [tooltip, setTooltip] = useState<{ visivel: boolean; p: any | null }>({ visivel: false, p: null });
 
-    const carregarDadosDashboard = async () => {
+    const carregarDadosDashboard = useCallback(async () => {
         setCarregando(true);
         try {
-            const dataInicioFiltro = `${dataInicio}T00:00:00.000Z`;
-            const dataFimFiltro = `${dataFim}T23:59:59.999Z`;
+            const { inicio: dataInicioFiltro } = limitesDoDiaLocal(dataInicio);
+            const { fim: dataFimFiltro } = limitesDoDiaLocal(dataFim);
 
             // MOTOR DE BUSCA SEM LIMITE (PULA A BARREIRA DOS 1000)
             let todasVendas: any[] = [];
@@ -47,6 +48,7 @@ export default function DashboardRendimentos() {
                         itens_venda (
                             quantidade,
                             preco_unitario,
+                            custo_unitario,
                             produtos (
                                 nome,
                                 preco_custo
@@ -55,6 +57,7 @@ export default function DashboardRendimentos() {
                     `)
                     .gte('data_venda', dataInicioFiltro)
                     .lte('data_venda', dataFimFiltro)
+                    .neq('status', 'Cancelada')
                     .order('data_venda', { ascending: false })
                     .range(de, de + limite - 1);
 
@@ -78,9 +81,9 @@ export default function DashboardRendimentos() {
         } finally {
             setCarregando(false);
         }
-    };
+    }, [dataInicio, dataFim]);
 
-    useEffect(() => { (async () => { await carregarDadosDashboard(); })(); }, [dataInicio, dataFim]);
+    useEffect(() => { void carregarDadosDashboard(); }, [carregarDadosDashboard]);
 
     const gerarDiasMes = (ano: number, mes: number) => {
         const primeiroDiaSemana = new Date(ano, mes, 1).getDay();
@@ -99,7 +102,7 @@ export default function DashboardRendimentos() {
 
     const definirPeriodoFast = (tipo: 'hoje' | '7dias' | 'mes') => {
         const dataAtual = new Date();
-        const hojeString = dataAtual.toISOString().split('T')[0];
+        const hojeString = dataLocalISO(dataAtual);
 
         if (tipo === 'hoje') {
             setDataInicio(hojeString);
@@ -107,7 +110,7 @@ export default function DashboardRendimentos() {
         } else if (tipo === '7dias') {
             const seteDiasAtras = new Date();
             seteDiasAtras.setDate(dataAtual.getDate() - 7);
-            setDataInicio(seteDiasAtras.toISOString().split('T')[0]);
+            setDataInicio(dataLocalISO(seteDiasAtras));
             setDataFim(hojeString);
         } else if (tipo === 'mes') {
             setDataInicio(primeiroDiaDoMesStr);
@@ -143,7 +146,7 @@ export default function DashboardRendimentos() {
 
             venda.itens_venda?.forEach((item: any) => {
                 const precoVendaItem = item.preco_unitario * item.quantidade;
-                const precoCustoItem = (item.produtos?.preco_custo || 0) * item.quantidade;
+                const precoCustoItem = Number(item.custo_unitario ?? item.produtos?.preco_custo ?? 0) * item.quantidade;
 
                 lucroTotal += (precoVendaItem - precoCustoItem);
                 custoTotal += precoCustoItem;
@@ -201,7 +204,7 @@ export default function DashboardRendimentos() {
             maxValorGrafico,
             financeiro: { totalPix, totalDinheiro, totalCredito, totalDebito }
         };
-    }, [vendas, dataInicio, dataFim]);
+    }, [vendas]);
 
     const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 
@@ -243,7 +246,7 @@ export default function DashboardRendimentos() {
                     {/* Botões Rápidos */}
                     <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner w-full sm:w-auto justify-between">
                         <button onClick={() => definirPeriodoFast('hoje')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === hojeStr && dataFim === hojeStr ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Hoje</button>
-                        <button onClick={() => definirPeriodoFast('7dias')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === new Date(new Date().setDate(hojeDate.getDate() - 7)).toISOString().split('T')[0] ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>7 Dias</button>
+                                            <button onClick={() => definirPeriodoFast('7dias')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === dataLocalISO(new Date(new Date().setDate(hojeDate.getDate() - 7))) ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>7 Dias</button>
                         <button onClick={() => definirPeriodoFast('mes')} className={`flex-1 sm:flex-none px-4 md:px-3 py-2.5 md:py-1.5 text-sm md:text-xs font-bold rounded-lg transition-all ${dataInicio === primeiroDiaDoMesStr && dataFim === hojeStr ? 'bg-white text-cafe-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Este Mês</button>
                     </div>
 

@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { calcularCompraEmbalada } from '../lib/estoque';
 
 type Fornecedor = { id: string; nome: string };
-type Produto = {
-  id: string; nome: string; preco_custo: number;
-  unidade_medida: string; quantidade_estoque: number; estoque_minimo: number; tipo: string;
+type Insumo = {
+  id: string; nome: string; custo_unitario: number | null;
+  unidade_medida: string; quantidade_estoque: number | null;
+  qtd_embalagem: number | null; fator_correcao: number | null; preco_total_pago: number | null;
 };
 type Movimentacao = {
   id: string; quantidade: number; tipo_movimento: string; motivo: string;
-  atendente: string; created_at: string; produtos: { nome: string; unidade_medida: string; tipo: string };
+  atendente: string; created_at: string; insumos: { nome: string; unidade_medida: string };
 };
 
 interface EntradasComprasProps {
@@ -17,9 +19,10 @@ interface EntradasComprasProps {
 
 export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-  const [ingredientes, setIngredientes] = useState<Produto[]>([]);
-  const [todosProdutos, setTodosProdutos] = useState<Produto[]>([]);
+  const [ingredientes, setIngredientes] = useState<Insumo[]>([]);
+  const [todosInsumos, setTodosInsumos] = useState<Insumo[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
+  const [caixaAtivo, setCaixaAtivo] = useState<any | null>(null);
 
   // Estados Compras
   const [fornecedorId, setFornecedorId] = useState('');
@@ -28,6 +31,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const [valorTotalPago, setValorTotalPago] = useState<number | ''>('');
 
   // Estados para Contas a Pagar
+  const [metodoPagamento, setMetodoPagamento] = useState('PIX');
   const [gerarContaPagar, setGerarContaPagar] = useState(false);
   const [dataVencimento, setDataVencimento] = useState('');
 
@@ -35,12 +39,11 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const [novoFornecedor, setNovoFornecedor] = useState('');
   const [mostrarNovoFornecedor, setMostrarNovoFornecedor] = useState(false);
   const [novoIngredienteNome, setNovoIngredienteNome] = useState('');
-  const [novoIngredienteUnidade, setNovoIngredienteUnidade] = useState('g');
-  const [novoIngredienteEstoqueMinimo, setNovoIngredienteEstoqueMinimo] = useState<number | ''>(1000);
+  const [novoIngredienteUnidade, setNovoIngredienteUnidade] = useState('kg');
   const [mostrarNovoIngrediente, setMostrarNovoIngrediente] = useState(false);
 
   // Estados Auditoria de Estoque
-  const [ajusteProdutoId, setAjusteProdutoId] = useState('');
+  const [ajusteInsumoId, setAjusteInsumoId] = useState('');
   const [ajusteTipo, setAjusteTipo] = useState('Saída - Quebra/Desperdício');
   const [ajusteQuantidade, setAjusteQuantidade] = useState<number | ''>('');
   const [ajusteMotivo, setAjusteMotivo] = useState('');
@@ -65,24 +68,19 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
 
   const carregarDados = async () => {
     const { data: fornData } = await supabase.from('fornecedores').select('*').order('nome');
-    const { data: ingData } = await supabase.from('produtos').select('*').eq('tipo', 'ingrediente').eq('ativo', true).order('nome');
-    const { data: todosData } = await supabase.from('produtos').select('*').eq('tipo', 'ingrediente').eq('ativo', true).order('nome');
+    const { data: ingData } = await supabase.from('insumos').select('*').order('nome');
+    const { data: movData } = await supabase.from('movimentacoes_estoque').select('id, quantidade, tipo_movimento, motivo, atendente, created_at, insumos!inner(nome, unidade_medida)').not('insumo_id', 'is', null).order('created_at', { ascending: false }).limit(30);
+    const { data: caixaData } = await supabase.from('controle_caixa').select('id').eq('status', 'aberto').limit(1).maybeSingle();
 
-    const { data: movData } = await supabase.from('movimentacoes_estoque')
-      .select('id, quantidade, tipo_movimento, motivo, atendente, created_at, produtos!inner(nome, unidade_medida, tipo)')
-      .eq('produtos.tipo', 'ingrediente')
-      .order('created_at', { ascending: false }).limit(30);
-
+    if (caixaData) setCaixaAtivo(caixaData); else setCaixaAtivo(null);
     if (fornData) { setFornecedores(fornData); if (fornData.length > 0 && !fornecedorId) setFornecedorId(fornData[0].id); }
-    if (ingData) { setIngredientes(ingData); if (ingData.length > 0 && !ingredienteId) setIngredienteId(ingData[0].id); }
-    if (todosData) { setTodosProdutos(todosData); if (todosData.length > 0 && !ajusteProdutoId) setAjusteProdutoId(todosData[0].id); }
+    if (ingData) { setIngredientes(ingData); setTodosInsumos(ingData); if (ingData.length > 0 && !ingredienteId) setIngredienteId(ingData[0].id); if (ingData.length > 0 && !ajusteInsumoId) setAjusteInsumoId(ingData[0].id); }
     if (movData) setMovimentacoes(movData as unknown as Movimentacao[]);
   };
 
-   
-  useEffect(() => {
-    carregarDados();
-  }, []);
+  // A carga inicial deve ocorrer apenas uma vez; a função usa o estado inicial do formulário.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void carregarDados(); }, []);
 
   const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   const formatarData = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -117,18 +115,20 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
 
   const salvarNovoIngrediente = async () => {
     if (!novoIngredienteNome || !novoIngredienteUnidade) return;
-    const { data, error } = await supabase.from('produtos').insert([{
-      nome: novoIngredienteNome, tipo: 'ingrediente', unidade_medida: novoIngredienteUnidade, preco_custo: 0, quantidade_estoque: 0, estoque_minimo: Number(novoIngredienteEstoqueMinimo) || 0, ativo: true
+    const { data, error } = await supabase.from('insumos').insert([{
+      nome: novoIngredienteNome, unidade_medida: novoIngredienteUnidade, custo_unitario: 0,
+      quantidade_estoque: 0, fator_correcao: 1, qtd_embalagem: 1, preco_total_pago: 0,
     }]).select().single();
     if (!error && data) {
-      setIngredientes([...ingredientes, data]); setIngredienteId(data.id); setNovoIngredienteNome(''); setNovoIngredienteUnidade('g'); setNovoIngredienteEstoqueMinimo(1000); setMostrarNovoIngrediente(false); mostrarMensagem('Ingrediente criado!', 'aviso');
+      setIngredientes([...ingredientes, data]); setTodosInsumos([...todosInsumos, data]); setIngredienteId(data.id); setNovoIngredienteNome(''); setNovoIngredienteUnidade('kg'); setMostrarNovoIngrediente(false); mostrarMensagem('Ingrediente criado!', 'aviso');
     } else { mostrarMensagem('Erro ao criar ingrediente.', 'erro'); }
   };
 
   const confirmarApagarIngrediente = async () => {
     if (!ingredienteParaApagar) return;
     try {
-      const { error } = await supabase.from('produtos').update({ ativo: false }).eq('id', ingredienteParaApagar);
+      const { error } = await supabase.from('insumos').delete().eq('id', ingredienteParaApagar);
+      if (error?.code === '23503') return mostrarMensagem('Este insumo já está em uma receita ou movimentação e não pode ser removido.', 'aviso');
       if (error) throw error;
       mostrarMensagem('Ingrediente removido.', 'sucesso'); carregarDados();
     } catch (err) { console.error(err); mostrarMensagem('Erro ao excluir ingrediente.', 'erro'); } finally { setIngredienteParaApagar(null); }
@@ -137,70 +137,58 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const registarEntrada = async () => {
     if (!fornecedorId || !ingredienteId || !quantidadeComprada || !valorTotalPago) return mostrarMensagem('Preencha todos os campos.', 'aviso');
     if (gerarContaPagar && !dataVencimento) return mostrarMensagem('Preencha a data de vencimento da conta.', 'aviso');
+    if (metodoPagamento === 'Dinheiro' && !caixaAtivo && !gerarContaPagar) return mostrarMensagem('Não é possível retirar dinheiro da gaveta com o caixa fechado.', 'erro');
 
-    const novoCustoUnitario = Number(valorTotalPago) / Number(quantidadeComprada);
-    const produtoAtual = ingredientes.find(ing => ing.id === ingredienteId);
-    const estoqueAtualizado = (produtoAtual?.quantidade_estoque || 0) + Number(quantidadeComprada);
-    const nomeForn = fornecedores.find(f => f.id === fornecedorId)?.nome || '';
-    const nomeIngrediente = produtoAtual?.nome || 'Produto';
+    const insumoAtual = ingredientes.find(ing => ing.id === ingredienteId);
+    if (!insumoAtual) return;
+
+    const { custoUnitario: novoCustoUnitario, quantidadeEstoque: qtdeParaEstoque } = calcularCompraEmbalada({
+      quantidadeEmbalagens: Number(quantidadeComprada),
+      quantidadePorEmbalagem: insumoAtual.qtd_embalagem || 1,
+      valorTotalPago: Number(valorTotalPago),
+      fatorCorrecao: insumoAtual.fator_correcao || 1,
+    });
 
     try {
-      const { error: erroEntrada } = await supabase.from('entradas').insert([{ fornecedor_id: fornecedorId, total_nota: valorTotalPago }]);
-      if (erroEntrada) throw erroEntrada;
-
-      const { error: erroUpdate } = await supabase.from('produtos').update({ preco_custo: novoCustoUnitario, quantidade_estoque: estoqueAtualizado }).eq('id', ingredienteId);
-      if (erroUpdate) throw erroUpdate;
-
-      await supabase.from('movimentacoes_estoque').insert([{
-        produto_id: ingredienteId, quantidade: Number(quantidadeComprada), tipo_movimento: 'Entrada - Compra', motivo: `Nota Fornecedor: ${nomeForn}`, atendente
-      }]);
-
-      if (gerarContaPagar) {
-        await supabase.from('contas_pagar').insert([{
-          descricao: `Compra de Estoque: ${nomeIngrediente}`,
-          fornecedor_id: fornecedorId,
-          valor: Number(valorTotalPago),
-          data_vencimento: dataVencimento,
-          status: 'Pendente'
-        }]);
+      const { error } = await supabase.rpc('registrar_compra_insumo', {
+        p_insumo_id: ingredienteId,
+        p_fornecedor_id: fornecedorId,
+        p_quantidade_estoque: qtdeParaEstoque,
+        p_valor_total: Number(valorTotalPago),
+        p_custo_unitario: novoCustoUnitario,
+        p_gerar_conta_pagar: gerarContaPagar,
+        p_data_vencimento: gerarContaPagar ? dataVencimento : null,
+        p_metodo_pagamento: gerarContaPagar ? null : metodoPagamento,
+        p_caixa_id: caixaAtivo?.id || null,
+        p_atendente: atendente,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') {
+          return mostrarMensagem('A migration de compra atômica ainda não foi aplicada no Supabase.', 'aviso');
+        }
+        throw error;
       }
 
-      mostrarMensagem(gerarContaPagar ? 'Entrada e Conta a Pagar registadas com sucesso!' : 'Entrada registada! Stock atualizado.', 'sucesso');
-      setQuantidadeComprada('');
-      setValorTotalPago('');
-      setGerarContaPagar(false);
-      setDataVencimento('');
-      carregarDados();
-    } catch (err) { 
-      console.error(err); 
-      mostrarMensagem('Ocorreu um erro ao gravar a entrada.', 'erro'); 
-    }
+      mostrarMensagem(gerarContaPagar ? 'Entrada e conta pendente registadas.' : 'Entrada paga e estoque atualizado.', 'sucesso');
+      setQuantidadeComprada(''); setValorTotalPago(''); setGerarContaPagar(false); setDataVencimento(''); carregarDados();
+    } catch (err) { console.error(err); mostrarMensagem('Ocorreu um erro ao gravar a entrada.', 'erro'); }
   };
 
   const registarAjusteAuditoria = async () => {
-    if (!ajusteProdutoId || !ajusteQuantidade || !ajusteTipo) return mostrarMensagem('Preencha o produto, tipo e quantidade.', 'aviso');
-
-    const produtoAtual = todosProdutos.find(p => p.id === ajusteProdutoId);
-    if (!produtoAtual) return;
-
-    const isSaida = ajusteTipo.includes('Saída');
-
-    const novoEstoque = isSaida 
-      ? produtoAtual.quantidade_estoque - Number(ajusteQuantidade)
-      : produtoAtual.quantidade_estoque + Number(ajusteQuantidade);
+    if (!ajusteInsumoId || !ajusteQuantidade || !ajusteTipo) return mostrarMensagem('Preencha o insumo, tipo e quantidade.', 'aviso');
 
     try {
-      const { error: erroUpdate } = await supabase.from('produtos').update({ quantidade_estoque: novoEstoque }).eq('id', ajusteProdutoId);
-      if (erroUpdate) throw erroUpdate;
-
-      const { error: erroMov } = await supabase.from('movimentacoes_estoque').insert([{
-        produto_id: ajusteProdutoId,
-        quantidade: isSaida ? -Number(ajusteQuantidade) : Number(ajusteQuantidade),
-        tipo_movimento: ajusteTipo,
-        motivo: ajusteMotivo || 'Não informado',
-        atendente
-      }]);
-      if (erroMov) throw erroMov;
+      const { error } = await supabase.rpc('registrar_ajuste_insumo', {
+        p_insumo_id: ajusteInsumoId,
+        p_quantidade: Number(ajusteQuantidade),
+        p_tipo_movimento: ajusteTipo,
+        p_motivo: ajusteMotivo,
+        p_atendente: atendente,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') return mostrarMensagem('A migration de ajuste de estoque ainda não foi aplicada no Supabase.', 'aviso');
+        throw error;
+      }
 
       mostrarMensagem('Ajuste de stock registado com sucesso.', 'sucesso');
       setAjusteQuantidade(''); setAjusteMotivo(''); carregarDados();
@@ -262,14 +250,14 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
       )}
 
       {/* HEADER DA PÁGINA */}
-      <h2 className="text-2xl font-black text-cafe-primary mb-6 border-b border-cafe-secondary/30 pb-3">Gestão de Compras e Estoque</h2>
+      <h2 className="text-2xl font-black text-cafe-primary mb-6 border-b border-cafe-secondary/30 pb-3">Gestão de Compras (Ingredientes)</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 
         {/* COLUNA ESQUERDA: Registro de Compras e Fornecedores */}
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 md:p-6">
-            <h3 className="font-black text-cafe-dark text-lg border-b border-gray-100 pb-2 mb-4 uppercase tracking-wider text-sm">Registar Nota de Compra</h3>
+            <h3 className="font-black text-cafe-dark text-lg border-b border-gray-100 pb-2 mb-4 uppercase tracking-wider text-sm">Registar Entrada (Com Efeito Cascata)</h3>
 
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4">
               <div className="flex justify-between items-center mb-2">
@@ -304,46 +292,58 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                     <input type="text" placeholder="Nome do ingrediente" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm" value={novoIngredienteNome} onChange={(e) => setNovoIngredienteNome(e.target.value)} />
                     <div className="flex flex-col sm:flex-row gap-3">
                       <select className="w-full sm:flex-1 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm bg-gray-50" value={novoIngredienteUnidade} onChange={(e) => setNovoIngredienteUnidade(e.target.value)}>
-                        <option value="g">Gramas (g)</option><option value="kg">Quilos (kg)</option><option value="ml">Mililitros (ml)</option><option value="l">Litros (l)</option><option value="unidade">Unidade (un)</option>
+                        <option value="kg">Quilos (kg)</option><option value="g">Gramas (g)</option><option value="l">Litros (l)</option><option value="ml">Mililitros (ml)</option><option value="un">Unidade (un)</option>
                       </select>
-                      <input type="number" placeholder="Alerta Min." className="w-full sm:flex-1 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-base md:text-sm" value={novoIngredienteEstoqueMinimo} onChange={(e) => setNovoIngredienteEstoqueMinimo(Number(e.target.value))} />
                     </div>
                     <button onClick={salvarNovoIngrediente} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold mt-1 shadow transition">Salvar Ingrediente</button>
                   </div>
                 ) : (
                   <select className="w-full p-3 border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm" value={ingredienteId} onChange={(e) => setIngredienteId(e.target.value)}>
-                    {ingredientes.map(ing => <option key={ing.id} value={ing.id}>{ing.nome} (Atual: {ing.quantidade_estoque || 0}{ing.unidade_medida})</option>)}
+                    {ingredientes.map(ing => <option key={ing.id} value={ing.id}>{ing.nome} (Estoque: {ing.quantidade_estoque || 0}{ing.unidade_medida})</option>)}
                   </select>
                 )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-200">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Qtd. Comprada</label>
-                  <input type="number" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white" value={quantidadeComprada} onChange={(e) => setQuantidadeComprada(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Qtd Embalagens</label>
+                  <input type="number" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white" value={quantidadeComprada} onChange={(e) => setQuantidadeComprada(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Ex: 2 sacos de farinha" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Pago (R$)</label>
-                  <input type="number" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm font-bold text-red-600 bg-red-50" value={valorTotalPago} onChange={(e) => setValorTotalPago(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0.00" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Preço Pago (R$)</label>
+                  <input type="number" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm font-bold text-red-600 bg-red-50" value={valorTotalPago} onChange={(e) => setValorTotalPago(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Total da Nota" />
                 </div>
               </div>
 
-              {/* CHECKBOX E DATA DE VENCIMENTO */}
+              {/* PAGAMENTO E DATA DE VENCIMENTO */}
               <div className="bg-white border border-gray-200 p-3 rounded-lg flex flex-col gap-3 shadow-sm">
-                <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-cafe-dark select-none">
-                  <input type="checkbox" checked={gerarContaPagar} onChange={(e) => setGerarContaPagar(e.target.checked)} className="w-5 h-5 text-cafe-primary rounded border-gray-300" />
-                  Gerar Conta a Pagar (Boleto/A Prazo)?
-                </label>
-                {gerarContaPagar && (
-                  <div className="animate-fade-in pl-8">
-                    <label className="block text-[10px] font-bold text-red-500 uppercase tracking-widest mb-1">Vencimento da Conta</label>
+
+                <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+                  <button onClick={() => setGerarContaPagar(false)} className={`flex-1 text-xs font-bold py-2 rounded-md ${!gerarContaPagar ? 'bg-white shadow text-cafe-primary' : 'text-gray-500'}`}>Pagar Agora</button>
+                  <button onClick={() => setGerarContaPagar(true)} className={`flex-1 text-xs font-bold py-2 rounded-md ${gerarContaPagar ? 'bg-white shadow text-cafe-primary' : 'text-gray-500'}`}>Pagar a Prazo</button>
+                </div>
+
+                {!gerarContaPagar ? (
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Forma de Pagamento</label>
+                    <select className="w-full p-3 md:p-2 border border-gray-200 rounded-lg outline-none text-base md:text-sm text-gray-700 bg-gray-50 focus:ring-2 focus:ring-blue-400" value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)}>
+                      <option value="PIX">PIX</option>
+                      <option value="Dinheiro">Dinheiro da Gaveta</option>
+                      <option value="Cartão de Débito">Cartão de Débito</option>
+                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                      <option value="Transferência">Transferência</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="animate-fade-in">
+                    <label className="block text-[10px] font-bold text-red-500 uppercase tracking-widest mb-1">Vencimento do Boleto</label>
                     <input type="date" className="w-full p-3 md:p-2 border border-red-200 rounded-lg outline-none text-base md:text-sm text-red-700 bg-red-50 focus:ring-2 focus:ring-red-400" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} />
                   </div>
                 )}
               </div>
 
               <button onClick={registarEntrada} className="w-full bg-cafe-primary text-white font-black uppercase tracking-wider py-4 md:py-3.5 rounded-xl shadow-lg hover:bg-cafe-dark transition active:scale-95 mt-2">
-                Gravar Compra e Estoque
+                Gravar Compra e Atualizar Custos
               </button>
             </div>
           </div>
@@ -409,8 +409,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
           {/* VIEW MOBILE: Inventário */}
           <div className="md:hidden flex-1 overflow-y-auto max-h-[60vh] p-3 space-y-3 bg-gray-50/50">
             {ingredientesFiltrados.map(ing => {
-              const semEstoque = ing.quantidade_estoque <= 0;
-              const alerta = ing.quantidade_estoque <= (ing.estoque_minimo || 0);
+              const semEstoque = Number(ing.quantidade_estoque) <= 0;
               return (
                 <div key={ing.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative">
                   <button onClick={() => setIngredienteParaApagar(ing.id)} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 font-black rounded-lg transition">✕</button>
@@ -422,11 +421,11 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                       <span className="font-black text-gray-800 text-lg leading-none mt-1">
                         {ing.quantidade_estoque || 0} <span className="text-xs font-bold text-gray-500">{ing.unidade_medida}</span>
                       </span>
-                      {semEstoque ? <span className="text-[9px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded mt-1 w-max">Zerado</span> : alerta ? <span className="text-[9px] bg-yellow-100 text-yellow-700 font-bold px-1.5 py-0.5 rounded mt-1 w-max">Baixo</span> : null}
+                      {semEstoque ? <span className="text-[9px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded mt-1 w-max">Zerado</span> : null}
                     </div>
                     <div className="bg-gray-50 p-2 rounded-lg border border-gray-100 flex flex-col">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase">Custo Médio</span>
-                      <span className="font-bold text-gray-600 mt-1">{formatarMoeda(ing.preco_custo)}</span>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">Custo Unitário</span>
+                      <span className="font-bold text-gray-600 mt-1">{formatarMoeda(Number(ing.custo_unitario) || 0)}</span>
                     </div>
                   </div>
                 </div>
@@ -452,9 +451,9 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                     <td className="p-4 font-bold text-gray-800">{ing.nome}</td>
                     <td className="p-4">
                       <span className="font-black text-gray-800 text-base">{ing.quantidade_estoque || 0}</span> <span className="text-xs font-bold text-gray-500">{ing.unidade_medida}</span>
-                      {ing.quantidade_estoque <= 0 ? <span className="block mt-1 px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-800 rounded w-max">Sem Estoque</span> : ing.quantidade_estoque <= (ing.estoque_minimo || 0) ? <span className="block mt-1 px-2 py-0.5 text-[10px] font-bold bg-yellow-100 text-yellow-800 rounded w-max">Baixo</span> : null}
+                      {Number(ing.quantidade_estoque) <= 0 ? <span className="block mt-1 px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-800 rounded w-max">Sem Estoque</span> : null}
                     </td>
-                    <td className="p-4 text-gray-600 font-semibold">{formatarMoeda(ing.preco_custo)}</td>
+                    <td className="p-4 text-gray-600 font-semibold">{formatarMoeda(Number(ing.custo_unitario) || 0)}</td>
                     <td className="p-4 text-center">
                       <button onClick={() => setIngredienteParaApagar(ing.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 w-8 h-8 rounded-lg font-black transition">✕</button>
                     </td>
@@ -477,8 +476,8 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ingrediente a Ajustar</label>
-                <select className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm font-semibold text-gray-700" value={ajusteProdutoId} onChange={(e) => setAjusteProdutoId(e.target.value)}>
-                  {todosProdutos.map(p => <option key={p.id} value={p.id}>{p.nome} (Atual: {p.quantidade_estoque} {p.tipo === 'venda' ? 'un' : p.unidade_medida})</option>)}
+                <select className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm font-semibold text-gray-700" value={ajusteInsumoId} onChange={(e) => setAjusteInsumoId(e.target.value)}>
+                  {todosInsumos.map(insumo => <option key={insumo.id} value={insumo.id}>{insumo.nome} (Atual: {insumo.quantidade_estoque} {insumo.unidade_medida})</option>)}
                 </select>
               </div>
 
@@ -526,13 +525,13 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                       {mov.tipo_movimento}
                     </span>
                   </div>
-                  <h4 className="font-black text-gray-800 text-base">{mov.produtos?.nome}</h4>
+                  <h4 className="font-black text-gray-800 text-base">{mov.insumos?.nome}</h4>
                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1">
                     <p className="text-xs text-gray-600 italic mb-2 leading-tight">"{mov.motivo}"</p>
                     <div className="flex justify-between items-end pt-2 border-t border-gray-200 mt-1">
                       <span className="text-[10px] font-bold text-gray-400 uppercase">Resp: {mov.atendente}</span>
                       <span className={`font-black text-lg ${isEntrada ? 'text-green-600' : 'text-red-600'}`}>
-                        {mov.quantidade > 0 ? '+' : ''}{mov.quantidade} <span className="text-xs font-bold text-gray-500">{mov.produtos?.tipo === 'venda' ? 'un' : mov.produtos?.unidade_medida}</span>
+                        {mov.quantidade > 0 ? '+' : ''}{mov.quantidade} <span className="text-xs font-bold text-gray-500">{mov.insumos?.unidade_medida}</span>
                       </span>
                     </div>
                   </div>
@@ -548,7 +547,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
               <thead className="bg-gray-50 border-b sticky top-0 z-10 text-gray-600 uppercase tracking-wider text-xs">
                 <tr>
                   <th className="p-4 font-bold">Data/Hora</th>
-                  <th className="p-4 font-bold">Produto</th>
+                  <th className="p-4 font-bold">Insumo</th>
                   <th className="p-4 font-bold">Movimento</th>
                   <th className="p-4 font-bold">Motivo</th>
                   <th className="p-4 font-bold text-center">Qtd</th>
@@ -561,7 +560,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                   return (
                     <tr key={mov.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="p-4 text-gray-500 text-xs font-semibold">{formatarData(mov.created_at)}</td>
-                      <td className="p-4 font-bold text-gray-800">{mov.produtos?.nome}</td>
+                      <td className="p-4 font-bold text-gray-800">{mov.insumos?.nome}</td>
                       <td className="p-4">
                         <span className={`px-2 py-1 rounded-lg text-xs font-bold ${isEntrada ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
                           {mov.tipo_movimento}
@@ -569,13 +568,13 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                       </td>
                       <td className="p-4 text-gray-500 text-xs max-w-[200px] truncate" title={mov.motivo}>{mov.motivo}</td>
                       <td className={`p-4 text-center font-black ${isEntrada ? 'text-green-600' : 'text-red-600'}`}>
-                        {mov.quantidade > 0 ? '+' : ''}{mov.quantidade} <span className="text-xs font-bold text-gray-400">{mov.produtos?.tipo === 'venda' ? 'un' : mov.produtos?.unidade_medida}</span>
+                        {mov.quantidade > 0 ? '+' : ''}{mov.quantidade} <span className="text-xs font-bold text-gray-400">{mov.insumos?.unidade_medida}</span>
                       </td>
                       <td className="p-4 text-xs font-bold text-gray-600 uppercase">{mov.atendente}</td>
                     </tr>
                   )
                 })}
-                {movimentacoes.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-gray-500 italic">Nenhum movimento registado ainda.</td></tr>}
+                {movimentacoes.length === 0 && (<tr><td colSpan={6} className="p-8 text-center text-gray-500 italic">Nenhum movimento registado ainda.</td></tr>)}
               </tbody>
             </table>
           </div>

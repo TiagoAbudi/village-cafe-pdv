@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { valoresIguais } from '../lib/money';
 
-type ItemVenda = { produto_id: string; quantidade: number; preco_unitario: number; produtos: { nome: string } };
+type ItemVenda = { produto_id: string; quantidade: number; preco_unitario: number; custo_unitario?: number | null; produtos: { nome: string } };
 type Venda = {
   id: string; total: number; metodo_pagamento: string; data_venda: string; identificacao_pedido: string;
   valor_pix: number; valor_dinheiro: number; valor_cartao_credito: number; valor_cartao_debito: number;
-  atendente: string; itens_venda: ItemVenda[];
+  atendente: string; status?: string; itens_venda: ItemVenda[];
 };
 type Caixa = { id: string; fundo_inicial: number; status: string; data_abertura: string; data_fechamento?: string; valor_informado_fechamento?: number };
-type ProdutoAtivo = { id: string; nome: string; preco_venda: number; quantidade_estoque: number; is_receita: boolean; };
-type ItemEdicao = { produto_id: string; nome: string; preco_unitario: number; quantidade: number; is_receita: boolean; };
+type ProdutoAtivo = { id: string; nome: string; preco_venda: number; preco_custo: number; quantidade_estoque: number; is_receita: boolean; };
+type ItemEdicao = { produto_id: string; nome: string; preco_unitario: number; custo_unitario: number; quantidade: number; is_receita: boolean; };
 
 export default function DashboardModulo() {
   const [caixaAtual, setCaixaAtual] = useState<Caixa | null>(null);
@@ -40,9 +41,15 @@ export default function DashboardModulo() {
     setTimeout(() => setFeedback({ msg: '', tipo: null }), 4000);
   };
 
-  const buscarVendasDoCaixa = async (dataAbertura: string, caixaId: string) => {
-    const { data: vendas } = await supabase.from('vendas').select(`*, itens_venda ( produto_id, quantidade, preco_unitario, produtos ( nome ) )`).gte('data_venda', dataAbertura).order('data_venda', { ascending: false });
-    if (vendas) setVendasHoje(vendas as unknown as Venda[]);
+  const buscarVendasDoCaixa = async (caixaId: string, dataAbertura: string) => {
+    const selecaoVendas = `*, itens_venda ( produto_id, quantidade, preco_unitario, custo_unitario, produtos ( nome ) )`;
+    const [vendasVinculadas, vendasLegadas] = await Promise.all([
+      supabase.from('vendas').select(selecaoVendas).eq('caixa_id', caixaId).neq('status', 'Cancelada'),
+      supabase.from('vendas').select(selecaoVendas).is('caixa_id', null).gte('data_venda', dataAbertura).neq('status', 'Cancelada'),
+    ]);
+    const vendas = [...(vendasVinculadas.data || []), ...(vendasLegadas.data || [])]
+      .sort((a, b) => new Date(b.data_venda).getTime() - new Date(a.data_venda).getTime());
+    setVendasHoje(vendas as unknown as Venda[]);
 
     const { data: movs } = await supabase.from('movimentacoes_caixa').select('*').eq('caixa_id', caixaId);
     if (movs) setMovimentacoesCaixa(movs);
@@ -53,7 +60,7 @@ export default function DashboardModulo() {
     const { data: caixaData } = await supabase.from('controle_caixa').select('*').eq('status', 'aberto').order('data_abertura', { ascending: false }).limit(1).maybeSingle();
     if (caixaData) {
       setCaixaAtual(caixaData);
-      buscarVendasDoCaixa(caixaData.data_abertura, caixaData.id);
+      buscarVendasDoCaixa(caixaData.id, caixaData.data_abertura);
     } else {
       setCaixaAtual(null);
     }
@@ -97,38 +104,14 @@ export default function DashboardModulo() {
   const confirmarCancelamentoVenda = async () => {
     if (!vendaParaCancelar || !caixaAtual) return;
     try {
-      // 1. Restaurar o Estoque
-      const { data: fichas } = await supabase.from('fichas_tecnicas').select('produto_venda_id');
-      const fichasIds = new Set(fichas?.map(f => f.produto_venda_id) || []);
-      const { data: itens } = await supabase.from('itens_venda').select('produto_id, quantidade').eq('venda_id', vendaParaCancelar.id);
-
-      if (itens) {
-        for (const item of itens) {
-          if (!fichasIds.has(item.produto_id)) {
-            const { data: prod } = await supabase.from('produtos').select('quantidade_estoque').eq('id', item.produto_id).single();
-            if (prod) await supabase.from('produtos').update({ quantidade_estoque: Number(prod.quantidade_estoque) + Number(item.quantidade) }).eq('id', item.produto_id);
-          }
-        }
-      }
-
-      // 2. Estornar Saldo do Banco Digital
-      const valorBancoEstorno = (Number(vendaParaCancelar.valor_pix) || 0) +
-        (Number(vendaParaCancelar.valor_cartao_credito) || 0) +
-        (Number(vendaParaCancelar.valor_cartao_debito) || 0);
-
-      if (valorBancoEstorno > 0) {
-        const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-        if (banco) {
-          await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) - valorBancoEstorno }).eq('id', 1);
-        }
-      }
-
-      // 3. Deletar Venda
-      await supabase.from('itens_venda').delete().eq('venda_id', vendaParaCancelar.id);
-      await supabase.from('vendas').delete().eq('id', vendaParaCancelar.id);
+      const { error: erroCancelamento } = await supabase.rpc('cancelar_venda', {
+        p_venda_id: vendaParaCancelar.id,
+        p_motivo: `Cancelamento de ${vendaParaCancelar.identificacao_pedido}`,
+      });
+      if (erroCancelamento) throw erroCancelamento;
 
       mostrarMensagem('Venda cancelada e saldo digital estornado!', 'sucesso');
-      buscarVendasDoCaixa(caixaAtual.data_abertura, caixaAtual.id);
+      buscarVendasDoCaixa(caixaAtual.id, caixaAtual.data_abertura);
     } catch (error) { console.error(error); mostrarMensagem('Erro ao cancelar a venda.', 'erro'); }
     finally { setVendaParaCancelar(null); }
   };
@@ -146,7 +129,7 @@ export default function DashboardModulo() {
 
     if (prodData) {
       setProdutosDisponiveis(prodData.map(p => ({
-        id: p.id, nome: p.nome, preco_venda: p.preco_venda, quantidade_estoque: p.quantidade_estoque || 0, is_receita: fichasIds.has(p.id)
+        id: p.id, nome: p.nome, preco_venda: p.preco_venda, preco_custo: p.preco_custo || 0, quantidade_estoque: p.quantidade_estoque || 0, is_receita: fichasIds.has(p.id)
       })));
     }
 
@@ -154,6 +137,7 @@ export default function DashboardModulo() {
       produto_id: item.produto_id,
       nome: item.produtos?.nome || 'Desconhecido',
       preco_unitario: item.preco_unitario,
+      custo_unitario: item.custo_unitario || produtosDisponiveis.find(produto => produto.id === item.produto_id)?.preco_custo || 0,
       quantidade: item.quantidade,
       is_receita: fichasIds.has(item.produto_id)
     }));
@@ -173,7 +157,7 @@ export default function DashboardModulo() {
     if (existe) {
       alterarQtdEdicao(prod.id, 1);
     } else {
-      setCarrinhoEdicao([...carrinhoEdicao, { produto_id: prod.id, nome: prod.nome, preco_unitario: prod.preco_venda, quantidade: 1, is_receita: prod.is_receita }]);
+      setCarrinhoEdicao([...carrinhoEdicao, { produto_id: prod.id, nome: prod.nome, preco_unitario: prod.preco_venda, custo_unitario: prod.preco_custo, quantidade: 1, is_receita: prod.is_receita }]);
     }
     setProdutoAddId('');
   };
@@ -181,75 +165,36 @@ export default function DashboardModulo() {
   const totalEdicao = useMemo(() => carrinhoEdicao.reduce((acc, item) => acc + (item.preco_unitario * item.quantidade), 0), [carrinhoEdicao]);
   const totalPagoEdicao = (Number(editPix) || 0) + (Number(editDinheiro) || 0) + (Number(editCredito) || 0) + (Number(editDebito) || 0);
 
-  // --- ATUALIZADO: SALVAR EDIÇÃO (AJUSTA O BANCO) ---
+  // A edição preserva a venda anterior como cancelada e gera uma substituta auditável.
   const salvarEdicaoVenda = async () => {
     if (!vendaEmEdicao || !caixaAtual) return;
     if (carrinhoEdicao.length === 0) return mostrarMensagem('A venda precisa ter pelo menos 1 item. Se quiser zerar, use Cancelar Venda.', 'aviso');
-    if (totalPagoEdicao !== totalEdicao) return mostrarMensagem(`Ajuste os pagamentos! O total dos itens é ${formatarMoeda(totalEdicao)} mas os pagamentos somam ${formatarMoeda(totalPagoEdicao)}.`, 'erro');
+    if (!valoresIguais(totalPagoEdicao, totalEdicao)) return mostrarMensagem(`Ajuste os pagamentos! O total dos itens é ${formatarMoeda(totalEdicao)} mas os pagamentos somam ${formatarMoeda(totalPagoEdicao)}.`, 'erro');
 
     try {
-      // Ajuste de Estoque
-      for (const item of vendaEmEdicao.itens_venda) {
-        const isReceita = produtosDisponiveis.find(p => p.id === item.produto_id)?.is_receita;
-        if (!isReceita) {
-          const { data: pData } = await supabase.from('produtos').select('quantidade_estoque').eq('id', item.produto_id).single();
-          if (pData) await supabase.from('produtos').update({ quantidade_estoque: Number(pData.quantidade_estoque) + Number(item.quantidade) }).eq('id', item.produto_id);
-        }
-      }
-
-      for (const item of carrinhoEdicao) {
-        if (!item.is_receita) {
-          const { data: pData } = await supabase.from('produtos').select('quantidade_estoque').eq('id', item.produto_id).single();
-          if (pData) await supabase.from('produtos').update({ quantidade_estoque: Number(pData.quantidade_estoque) - Number(item.quantidade) }).eq('id', item.produto_id);
-        }
-      }
-
-      // Ajuste do Banco Digital (Calcula a diferença entre o que era antes e o novo)
-      const valorBancoAntigo = (Number(vendaEmEdicao.valor_pix) || 0) +
-        (Number(vendaEmEdicao.valor_cartao_credito) || 0) +
-        (Number(vendaEmEdicao.valor_cartao_debito) || 0);
-
-      const valorBancoNovo = (Number(editPix) || 0) +
-        (Number(editCredito) || 0) +
-        (Number(editDebito) || 0);
-
-      const diferencaBanco = valorBancoNovo - valorBancoAntigo;
-
-      if (diferencaBanco !== 0) {
-        const { data: banco } = await supabase.from('conta_bancaria').select('saldo').eq('id', 1).single();
-        if (banco) {
-          await supabase.from('conta_bancaria').update({ saldo: Number(banco.saldo) + diferencaBanco }).eq('id', 1);
-        }
-      }
-
-      const metodosUsados = [];
-      if (editPix) metodosUsados.push('PIX');
-      if (editDinheiro) metodosUsados.push('Dinheiro');
-      if (editCredito) metodosUsados.push('Cartão de Crédito');
-      if (editDebito) metodosUsados.push('Cartão de Débito');
-
-      // Atualiza Venda
-      await supabase.from('vendas').update({
-        total: totalEdicao, metodo_pagamento: metodosUsados.join(' + '),
-        valor_pix: Number(editPix) || 0, valor_dinheiro: Number(editDinheiro) || 0,
-        valor_cartao_credito: Number(editCredito) || 0, valor_cartao_debito: Number(editDebito) || 0
-      }).eq('id', vendaEmEdicao.id);
-
-      await supabase.from('itens_venda').delete().eq('venda_id', vendaEmEdicao.id);
+      const pagamentosRegistrados = [
+        ['PIX', Number(editPix) || 0],
+        ['Dinheiro', Number(editDinheiro) || 0],
+        ['Cartão de Crédito', Number(editCredito) || 0],
+        ['Cartão de Débito', Number(editDebito) || 0],
+      ].filter(([, valor]) => Number(valor) > 0).map(([metodo, valor]) => ({ metodo, valor }));
       const novosItens = carrinhoEdicao.map(item => ({
-        venda_id: vendaEmEdicao.id, produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario
+        produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario, custo_unitario: item.custo_unitario
       }));
-      await supabase.from('itens_venda').insert(novosItens);
-
-      await supabase.from('movimentacoes_estoque').insert([{
-        produto_id: carrinhoEdicao[0].produto_id,
-        quantidade: 0, tipo_movimento: 'Entrada - Ajuste/Auditoria',
-        motivo: `Edição da Venda ${vendaEmEdicao.identificacao_pedido}`, atendente: vendaEmEdicao.atendente
-      }]);
+      const { error: erroVenda } = await supabase.rpc('editar_venda', {
+        p_venda_id: vendaEmEdicao.id,
+        p_identificacao_pedido: vendaEmEdicao.identificacao_pedido,
+        p_total: totalEdicao,
+        p_desconto: 0,
+        p_pagamentos: pagamentosRegistrados,
+        p_atendente: vendaEmEdicao.atendente,
+        p_itens: novosItens,
+      });
+      if (erroVenda) throw erroVenda;
 
       mostrarMensagem('Venda atualizada com sucesso!', 'sucesso');
       setVendaEmEdicao(null);
-      buscarVendasDoCaixa(caixaAtual.data_abertura, caixaAtual.id);
+      buscarVendasDoCaixa(caixaAtual.id, caixaAtual.data_abertura);
 
     } catch (error) { console.error(error); mostrarMensagem('Erro ao salvar a edição.', 'erro'); }
   };
