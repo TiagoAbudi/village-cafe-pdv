@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:homolog": "vite --host --mode homologacao",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

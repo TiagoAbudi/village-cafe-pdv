@@ -50,12 +50,15 @@ O local apropriado é `.env.local` na raiz deste repositório. Esse arquivo não
 ```bash
 npm install
 npm run dev
+npm run dev:homolog
 npm run build
 npm run lint
 npm test -- --run
 ```
 
 Também existem `npm run preview`, `npm run test:ui` e `npm run test:coverage`.
+
+`npm run dev` usa as variáveis de produção presentes apenas no arquivo local `.env`; `npm run dev:homolog` usa `.env.homologacao.local`, também ignorado pelo Git, para conectar ao Supabase de homologação. O ambiente de homologação criado para este projeto tem ref `qgixtofcrdwbcotqpvgs`.
 
 ## Estado da validação em 31/08/2026
 
