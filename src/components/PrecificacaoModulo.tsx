@@ -9,6 +9,7 @@ type FichaProduto = { id: string; produto_venda_id: string; rendimento_porcoes: 
 type FichaItem = { id: string; ficha_id: string; insumo_id?: string; receita_base_id?: string; quantidade_utilizada: number; custo_calculado: number; insumos?: { nome: string; unidade_medida: string }; receitas_base?: { nome: string; unidade_medida: string } };
 type Parametros = { imposto_taxa_cartao_pct: number; custos_fixos_pct: number; margem_lucro_alvo_pct: number; };
 type ProdutoPDV = { id: string; nome: string; preco_venda: number; modo_estoque: string; };
+type FormInsumo = { nome: string; unidade: string; preco: string; qtd: string; fc: string; };
 
 export default function PrecificacaoModulo() {
     const [abaAtiva, setAbaAtiva] = useState<'insumos' | 'bases' | 'fichas' | 'diagnostico'>('insumos');
@@ -22,6 +23,8 @@ export default function PrecificacaoModulo() {
     const [parametros, setParametros] = useState<Parametros>({ imposto_taxa_cartao_pct: 8, custos_fixos_pct: 20, margem_lucro_alvo_pct: 40 });
 
     const [novoInsumo, setNovoInsumo] = useState({ nome: '', unidade: 'kg', preco: '', qtd: '', fc: '1' });
+    const [insumoEmEdicao, setInsumoEmEdicao] = useState<Insumo | null>(null);
+    const [edicaoInsumo, setEdicaoInsumo] = useState<FormInsumo>({ nome: '', unidade: 'kg', preco: '', qtd: '', fc: '1' });
 
     const [novaBase, setNovaBase] = useState({ nome: '', rendimento: '', unidade: 'Kg' });
     const [baseSelecionada, setBaseSelecionada] = useState<ReceitaBase | null>(null);
@@ -107,6 +110,46 @@ export default function PrecificacaoModulo() {
         if (error?.code === '23503') return mostrarMensagem('Este insumo já está em uma receita e não pode ser removido.', 'aviso');
         if (error) return mostrarMensagem('Erro ao remover insumo.', 'erro');
         carregarDados();
+    };
+
+    const abrirEdicaoInsumo = (insumo: Insumo) => {
+        setInsumoEmEdicao(insumo);
+        setEdicaoInsumo({
+            nome: insumo.nome,
+            unidade: insumo.unidade_medida,
+            preco: String(insumo.preco_total_pago ?? ''),
+            qtd: String(insumo.qtd_embalagem ?? ''),
+            fc: String(insumo.fator_correcao ?? 1),
+        });
+    };
+
+    const salvarEdicaoInsumo = async () => {
+        if (!insumoEmEdicao || !edicaoInsumo.nome || !edicaoInsumo.preco || !edicaoInsumo.qtd) {
+            return mostrarMensagem('Preencha nome, valor e quantidade da embalagem.', 'aviso');
+        }
+        const preco = Number(edicaoInsumo.preco);
+        const qtd = Number(edicaoInsumo.qtd);
+        const fc = Number(edicaoInsumo.fc) || 1;
+        if (preco < 0 || qtd <= 0 || fc <= 0) return mostrarMensagem('Quantidade e fator precisam ser maiores que zero.', 'aviso');
+
+        const { error } = await supabase.from('insumos').update({
+            nome: edicaoInsumo.nome.trim(),
+            unidade_medida: edicaoInsumo.unidade,
+            preco_total_pago: preco,
+            qtd_embalagem: qtd,
+            fator_correcao: fc,
+            custo_unitario: (preco / qtd) * fc,
+        }).eq('id', insumoEmEdicao.id);
+        if (error) return mostrarMensagem('Não foi possível atualizar o insumo.', 'erro');
+
+        try {
+            await recalcularCustosCMV();
+            setInsumoEmEdicao(null);
+            mostrarMensagem('Insumo e CMV atualizados.', 'sucesso');
+        } catch (erro) {
+            console.error(erro);
+            mostrarMensagem('Insumo atualizado, mas não foi possível recalcular o CMV.', 'erro');
+        }
     };
 
     const salvarBase = async () => {
@@ -317,6 +360,47 @@ export default function PrecificacaoModulo() {
                 </div>
             )}
 
+            {insumoEmEdicao && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4">
+                    <div className="bg-white rounded-2xl shadow-xl p-5 md:p-6 w-full max-w-lg border max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-xl font-black text-cafe-dark mb-1">Editar Insumo</h3>
+                        <p className="text-xs text-gray-500 mb-5">Esta edição atualiza o custo técnico e recalcula o CMV. Para registrar uma compra real e aumentar saldo, use a tela Estoque.</p>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome</label>
+                                <input autoFocus type="text" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-cafe-primary" value={edicaoInsumo.nome} onChange={e => setEdicaoInsumo({ ...edicaoInsumo, nome: e.target.value })} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Unidade</label>
+                                    <select className="w-full p-3 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-cafe-primary" value={edicaoInsumo.unidade} onChange={e => setEdicaoInsumo({ ...edicaoInsumo, unidade: e.target.value })}>
+                                        <option value="kg">Kg</option><option value="g">Gramas (g)</option><option value="l">Litro (l)</option><option value="ml">Mililitros (ml)</option><option value="un">Unidade (un)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fator (FC)</label>
+                                    <input type="number" min="0.001" step="any" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-cafe-primary" value={edicaoInsumo.fc} onChange={e => setEdicaoInsumo({ ...edicaoInsumo, fc: e.target.value })} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor da Embalagem (R$)</label>
+                                    <input type="number" min="0" step="any" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-cafe-primary" value={edicaoInsumo.preco} onChange={e => setEdicaoInsumo({ ...edicaoInsumo, preco: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Qtd. na Embalagem</label>
+                                    <input type="number" min="0.001" step="any" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-cafe-primary" value={edicaoInsumo.qtd} onChange={e => setEdicaoInsumo({ ...edicaoInsumo, qtd: e.target.value })} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={() => setInsumoEmEdicao(null)} className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition">Cancelar</button>
+                            <button onClick={salvarEdicaoInsumo} className="flex-1 px-4 py-3 bg-cafe-primary text-white hover:bg-cafe-dark rounded-xl font-bold transition shadow-md">Salvar Alterações</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-200 pb-4 gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-cafe-primary uppercase tracking-wider">Engenharia de Cardápio</h2>
@@ -389,7 +473,10 @@ export default function PrecificacaoModulo() {
                                             <td className="p-3 font-bold text-gray-800">{i.nome}</td>
                                             <td className="p-3 text-center font-semibold text-gray-600 bg-gray-50/50">{i.unidade_medida}</td>
                                             <td className="p-3 text-right font-black text-red-600">{formatarMoeda(i.preco_custo)} <span className="text-[10px] text-gray-400 font-normal">/{i.unidade_medida}</span></td>
-                                            <td className="p-3 text-center"><button onClick={() => deletarInsumo(i.id)} className="text-gray-400 hover:text-red-500 font-black px-2 transition">✕</button></td>
+                                            <td className="p-3 text-center whitespace-nowrap">
+                                                <button onClick={() => abrirEdicaoInsumo(i)} className="text-blue-600 hover:text-blue-800 font-bold px-2 transition">Editar</button>
+                                                <button onClick={() => deletarInsumo(i.id)} className="text-gray-400 hover:text-red-500 font-black px-2 transition">✕</button>
+                                            </td>
                                         </tr>
                                     ))}
                                     {insumosFiltrados.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-gray-400 italic">Nenhum insumo encontrado.</td></tr>}
