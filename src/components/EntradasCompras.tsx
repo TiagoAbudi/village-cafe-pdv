@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { calcularCompraEmbalada } from '../lib/estoque';
+import { converterQuantidadeParaEstoque, unidadesCompativeis } from '../lib/estoque';
 
 type Fornecedor = { id: string; nome: string };
 type Insumo = {
@@ -28,6 +28,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const [fornecedorId, setFornecedorId] = useState('');
   const [ingredienteId, setIngredienteId] = useState('');
   const [quantidadeComprada, setQuantidadeComprada] = useState<number | ''>('');
+  const [unidadeEntrada, setUnidadeEntrada] = useState('');
   const [valorTotalPago, setValorTotalPago] = useState<number | ''>('');
 
   // Estados para Contas a Pagar
@@ -60,6 +61,17 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
   const ingredientesFiltrados = ingredientes.filter(ing =>
     ing.nome.toLowerCase().includes(termoBuscaIngrediente.toLowerCase())
   );
+  const insumoAtual = ingredientes.find(ing => ing.id === ingredienteId);
+  const unidadeEntradaEfetiva = unidadeEntrada || insumoAtual?.unidade_medida || 'un';
+  const unidadesEntradaDisponiveis = insumoAtual ? unidadesCompativeis(insumoAtual.unidade_medida) : [];
+  let quantidadeParaEstoque: number | null = null;
+  if (insumoAtual && quantidadeComprada && Number(quantidadeComprada) > 0) {
+    try {
+      quantidadeParaEstoque = converterQuantidadeParaEstoque(Number(quantidadeComprada), unidadeEntradaEfetiva, insumoAtual.unidade_medida);
+    } catch {
+      quantidadeParaEstoque = null;
+    }
+  }
 
   const mostrarMensagem = (msg: string, tipo: 'sucesso' | 'erro' | 'aviso') => {
     setFeedback({ msg, tipo });
@@ -84,6 +96,13 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
 
   const formatarMoeda = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   const formatarData = (dataIso: string) => new Date(dataIso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const formatarQuantidade = (valor: number | null) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(Number(valor) || 0);
+  const formatarEstoque = (quantidade: number | null, unidade: string) => {
+    const valor = Number(quantidade) || 0;
+    if (unidade === 'kg' && valor > 0 && valor < 1) return `${formatarQuantidade(valor)} kg (${formatarQuantidade(valor * 1000)} g)`;
+    if (unidade === 'l' && valor > 0 && valor < 1) return `${formatarQuantidade(valor)} l (${formatarQuantidade(valor * 1000)} ml)`;
+    return `${formatarQuantidade(valor)} ${unidade}`;
+  };
 
   const salvarNovoFornecedor = async () => {
     if (!novoFornecedor) return;
@@ -139,15 +158,14 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
     if (gerarContaPagar && !dataVencimento) return mostrarMensagem('Preencha a data de vencimento da conta.', 'aviso');
     if (metodoPagamento === 'Dinheiro' && !caixaAtivo && !gerarContaPagar) return mostrarMensagem('Não é possível retirar dinheiro da gaveta com o caixa fechado.', 'erro');
 
-    const insumoAtual = ingredientes.find(ing => ing.id === ingredienteId);
     if (!insumoAtual) return;
-
-    const { custoUnitario: novoCustoUnitario, quantidadeEstoque: qtdeParaEstoque } = calcularCompraEmbalada({
-      quantidadeEmbalagens: Number(quantidadeComprada),
-      quantidadePorEmbalagem: insumoAtual.qtd_embalagem || 1,
-      valorTotalPago: Number(valorTotalPago),
-      fatorCorrecao: insumoAtual.fator_correcao || 1,
-    });
+    let qtdeParaEstoque: number;
+    try {
+      qtdeParaEstoque = converterQuantidadeParaEstoque(Number(quantidadeComprada), unidadeEntradaEfetiva, insumoAtual.unidade_medida);
+    } catch (error) {
+      return mostrarMensagem(error instanceof Error ? error.message : 'Quantidade ou unidade inválida.', 'aviso');
+    }
+    const novoCustoUnitario = (Number(valorTotalPago) / qtdeParaEstoque) * (insumoAtual.fator_correcao || 1);
 
     try {
       const { error } = await supabase.rpc('registrar_compra_insumo', {
@@ -298,16 +316,22 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                     <button onClick={salvarNovoIngrediente} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold mt-1 shadow transition">Salvar Ingrediente</button>
                   </div>
                 ) : (
-                  <select className="w-full p-3 border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm" value={ingredienteId} onChange={(e) => setIngredienteId(e.target.value)}>
-                    {ingredientes.map(ing => <option key={ing.id} value={ing.id}>{ing.nome} (Estoque: {ing.quantidade_estoque || 0}{ing.unidade_medida})</option>)}
+                  <select className="w-full p-3 border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm" value={ingredienteId} onChange={(e) => { const novoId = e.target.value; setIngredienteId(novoId); setUnidadeEntrada(ingredientes.find(ing => ing.id === novoId)?.unidade_medida || ''); }}>
+                    {ingredientes.map(ing => <option key={ing.id} value={ing.id}>{ing.nome} (Estoque: {formatarEstoque(ing.quantidade_estoque, ing.unidade_medida)})</option>)}
                   </select>
                 )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-200">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Qtd Embalagens</label>
-                  <input type="number" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white" value={quantidadeComprada} onChange={(e) => setQuantidadeComprada(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Ex: 2 sacos de farinha" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantidade Recebida</label>
+                  <div className="flex gap-2">
+                    <input type="number" min="0.001" step="any" className="min-w-0 flex-1 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm bg-white" value={quantidadeComprada} onChange={(e) => setQuantidadeComprada(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Ex.: 432" />
+                    <select className="w-20 p-3 border border-gray-300 rounded-lg bg-white font-bold outline-none focus:ring-2 focus:ring-cafe-secondary" value={unidadeEntradaEfetiva} onChange={(e) => setUnidadeEntrada(e.target.value)} disabled={!insumoAtual}>
+                      {unidadesEntradaDisponiveis.map(unidade => <option key={unidade} value={unidade}>{unidade}</option>)}
+                    </select>
+                  </div>
+                  {insumoAtual && <p className="mt-2 text-xs text-gray-500">Controle deste insumo: <strong>{insumoAtual.unidade_medida}</strong>{quantidadeParaEstoque !== null && <> · entrada no estoque: <strong className="text-green-700">+{formatarQuantidade(quantidadeParaEstoque)} {insumoAtual.unidade_medida}</strong></>}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Preço Pago (R$)</label>
@@ -415,13 +439,17 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                   <button onClick={() => setIngredienteParaApagar(ing.id)} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 font-black rounded-lg transition">✕</button>
                   <h4 className="font-black text-gray-800 text-base mb-2 pr-8">{ing.nome}</h4>
 
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2 text-sm">
                     <div className="bg-gray-50 p-2 rounded-lg border border-gray-100 flex flex-col">
                       <span className="text-[10px] font-bold text-gray-500 uppercase">Estoque</span>
                       <span className="font-black text-gray-800 text-lg leading-none mt-1">
-                        {ing.quantidade_estoque || 0} <span className="text-xs font-bold text-gray-500">{ing.unidade_medida}</span>
+                        {formatarQuantidade(ing.quantidade_estoque)}
                       </span>
                       {semEstoque ? <span className="text-[9px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded mt-1 w-max">Zerado</span> : null}
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded-lg border border-gray-100 flex flex-col">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">Unidade</span>
+                      <span className="font-black text-gray-800 text-lg leading-none mt-1">{ing.unidade_medida}</span>
                     </div>
                     <div className="bg-gray-50 p-2 rounded-lg border border-gray-100 flex flex-col">
                       <span className="text-[10px] font-bold text-gray-500 uppercase">Custo Unitário</span>
@@ -441,6 +469,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                 <tr>
                   <th className="p-4 font-bold text-gray-600 uppercase text-xs">Ingrediente</th>
                   <th className="p-4 font-bold text-gray-600 uppercase text-xs">Estoque</th>
+                  <th className="p-4 font-bold text-gray-600 uppercase text-xs">Unidade</th>
                   <th className="p-4 font-bold text-gray-600 uppercase text-xs">Custo Unit.</th>
                   <th className="p-4 font-bold text-center text-gray-600 uppercase text-xs">Remover</th>
                 </tr>
@@ -450,16 +479,18 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                   <tr key={ing.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                     <td className="p-4 font-bold text-gray-800">{ing.nome}</td>
                     <td className="p-4">
-                      <span className="font-black text-gray-800 text-base">{ing.quantidade_estoque || 0}</span> <span className="text-xs font-bold text-gray-500">{ing.unidade_medida}</span>
+                      <span className="font-black text-gray-800 text-base">{formatarQuantidade(ing.quantidade_estoque)}</span>
+                      {ing.unidade_medida === 'kg' && Number(ing.quantidade_estoque) > 0 && Number(ing.quantidade_estoque) < 1 ? <span className="block text-xs text-gray-500">{formatarQuantidade(Number(ing.quantidade_estoque) * 1000)} g</span> : null}
                       {Number(ing.quantidade_estoque) <= 0 ? <span className="block mt-1 px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-800 rounded w-max">Sem Estoque</span> : null}
                     </td>
+                    <td className="p-4 text-gray-600 font-bold">{ing.unidade_medida}</td>
                     <td className="p-4 text-gray-600 font-semibold">{formatarMoeda(Number(ing.custo_unitario) || 0)}</td>
                     <td className="p-4 text-center">
                       <button onClick={() => setIngredienteParaApagar(ing.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 w-8 h-8 rounded-lg font-black transition">✕</button>
                     </td>
                   </tr>
                 ))}
-                {ingredientesFiltrados.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-gray-400 italic">Nenhum ingrediente base na lista.</td></tr>}
+                {ingredientesFiltrados.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-gray-400 italic">Nenhum ingrediente base na lista.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -492,7 +523,7 @@ export default function EntradasCompras({ atendente }: EntradasComprasProps) {
                   </select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Qtd a {ajusteTipo.includes('Saída') ? 'Remover' : 'Adicionar'}</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Qtd a {ajusteTipo.includes('Saída') ? 'Remover' : 'Adicionar'} ({todosInsumos.find(insumo => insumo.id === ajusteInsumoId)?.unidade_medida || 'un'})</label>
                   <input type="number" min="0" className="w-full p-3 md:p-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-cafe-secondary text-base md:text-sm font-bold text-center bg-white" value={ajusteQuantidade} onChange={(e) => setAjusteQuantidade(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
                 </div>
               </div>
