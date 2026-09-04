@@ -6,6 +6,7 @@ type Produto = {
   id: string; nome: string; preco_custo: number; preco_venda: number;
   quantidade_estoque: number; estoque_minimo: number;
   tamanho: number | null; unidade_medida: string;
+  modo_estoque: 'revenda' | 'producao_sob_demanda' | 'producao_lote';
 };
 
 type Insumo = {
@@ -68,6 +69,11 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
   const [ajusteQuantidade, setAjusteQuantidade] = useState<number | ''>('');
   const [ajusteMotivo, setAjusteMotivo] = useState('');
 
+  // Produção de itens acabados que possuem ficha técnica.
+  const [produtoParaProduzir, setProdutoParaProduzir] = useState<Produto | null>(null);
+  const [quantidadeProducao, setQuantidadeProducao] = useState<number | ''>('');
+  const [motivoProducao, setMotivoProducao] = useState('');
+
   // ESTADOS DO CARRINHO DE LOTE (COMPRA DE ESTOQUE)
   const [modalLoteOpen, setModalLoteOpen] = useState(false);
   const [abaLoteMobile, setAbaLoteMobile] = useState<'busca' | 'carrinho'>('busca');
@@ -101,7 +107,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
 
   const mixParaLote = useMemo(() => {
     const list = [
-        ...produtos.map(p => ({ ...p, tipoItem: 'produto' as const })),
+        ...produtos.filter(p => p.modo_estoque !== 'producao_lote').map(p => ({ ...p, tipoItem: 'produto' as const })),
         ...insumos.map(i => ({ ...i, tipoItem: 'insumo' as const, preco_venda: 0 }))
     ];
     return list.filter(item => item.nome.toLowerCase().includes(termoBuscaLote.toLowerCase()));
@@ -127,12 +133,13 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
     if (insuData) setInsumos(insuData as Insumo[]);
 
     if (prodData) {
-      setProdutos(prodData.filter(p => !produtosComReceita.has(p.id)));
+      setProdutos(prodData.filter(p => !produtosComReceita.has(p.id) || p.modo_estoque === 'producao_lote') as Produto[]);
     }
     if (movData) {
       const movs = (movData as unknown as Array<Record<string, unknown>>).filter(m => {
         const produtoId = typeof m['produto_id'] === 'string' ? (m['produto_id'] as string) : String(m['produto_id']);
-        return !produtosComReceita.has(produtoId);
+        const produto = prodData?.find(p => p.id === produtoId);
+        return !produtosComReceita.has(produtoId) || produto?.modo_estoque === 'producao_lote';
       }) as unknown as Movimentacao[];
       setMovimentacoes(movs);
     }
@@ -175,7 +182,8 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       const { data: produtoCriado, error: erroProd } = await supabase.from('produtos').insert([{
         nome, tipo: 'venda', preco_custo: Number(precoCusto) || 0, preco_venda: Number(precoVenda),
         unidade_medida: unidadeMedida, tamanho: tamanho !== '' ? Number(tamanho) : null,
-        quantidade_estoque: Number(quantidadeEstoque) || 0, estoque_minimo: Number(estoqueMinimo) || 5, ativo: true
+        quantidade_estoque: Number(quantidadeEstoque) || 0, estoque_minimo: Number(estoqueMinimo) || 5,
+        modo_estoque: 'revenda', ativo: true
       }]).select().single();
 
       if (erroProd) throw erroProd;
@@ -258,6 +266,35 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       carregarDados();
     } catch (error) { console.error(error); mostrarMensagem('Erro ao atualizar.', 'erro'); } finally {
       setProdutoParaAjuste(null); setAjusteQuantidade(''); setAjusteMotivo(''); setAjusteTipo('Entrada - Reposição');
+    }
+  };
+
+  const registrarProducao = async () => {
+    if (!produtoParaProduzir || !quantidadeProducao || Number(quantidadeProducao) <= 0) {
+      return mostrarMensagem('Informe uma quantidade produzida maior que zero.', 'aviso');
+    }
+    setCarregando(true);
+    try {
+      const { error } = await supabase.rpc('registrar_producao', {
+        p_produto_id: produtoParaProduzir.id,
+        p_quantidade: Number(quantidadeProducao),
+        p_atendente: atendente,
+        p_motivo: motivoProducao || null,
+      });
+      if (error) {
+        if (error.code === 'PGRST202') return mostrarMensagem('A migration de produção em lote ainda não foi aplicada no Supabase.', 'aviso');
+        throw error;
+      }
+      mostrarMensagem(`${quantidadeProducao} ${produtoParaProduzir.unidade_medida} produzido(s) e adicionado(s) ao estoque.`, 'sucesso');
+      setProdutoParaProduzir(null);
+      setQuantidadeProducao('');
+      setMotivoProducao('');
+      await carregarDados();
+    } catch (error) {
+      console.error(error);
+      mostrarMensagem('Não foi possível registrar a produção. Verifique o estoque dos insumos.', 'erro');
+    } finally {
+      setCarregando(false);
     }
   };
 
@@ -426,6 +463,29 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
       {feedback.tipo && (
         <div className={`fixed top-4 right-4 z-[200] px-4 py-3 rounded shadow-lg transition-all ${feedback.tipo === 'sucesso' ? 'bg-green-100 text-green-800' : feedback.tipo === 'erro' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
           <p className="text-sm font-semibold">{feedback.msg}</p>
+        </div>
+      )}
+
+      {produtoParaProduzir && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-5 md:p-6 w-full max-w-md border">
+            <h3 className="text-xl font-black text-cafe-dark mb-1">Produzir {produtoParaProduzir.nome}</h3>
+            <p className="text-sm text-gray-500 mb-5">A operação baixa os itens da ficha técnica e adiciona o produto acabado ao estoque.</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-1 text-gray-700">Quantidade produzida ({produtoParaProduzir.unidade_medida})</label>
+                <input autoFocus type="number" min="0.001" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-green-400" value={quantidadeProducao} onChange={(e) => setQuantidadeProducao(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1 text-gray-700">Observação (opcional)</label>
+                <input type="text" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-green-400" placeholder="Ex.: Lote da manhã" value={motivoProducao} onChange={(e) => setMotivoProducao(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => { setProdutoParaProduzir(null); setQuantidadeProducao(''); setMotivoProducao(''); }} className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition">Cancelar</button>
+              <button disabled={carregando} onClick={registrarProducao} className="flex-1 px-4 py-3 bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 rounded-xl font-bold transition shadow-md">{carregando ? 'Produzindo...' : 'Confirmar Produção'}</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -867,7 +927,8 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                       {p.quantidade_estoque} <span className="text-sm font-bold text-gray-500">{p.unidade_medida}</span>
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
+                  <div className={`grid ${p.modo_estoque === 'producao_lote' ? 'grid-cols-2' : 'grid-cols-3'} gap-2 mt-1`}>
+                    {p.modo_estoque === 'producao_lote' && <button onClick={() => setProdutoParaProduzir(p)} className="bg-green-50 text-green-700 font-bold py-2.5 rounded-lg text-sm border border-green-200 active:bg-green-100 transition">Produzir</button>}
                     <button onClick={() => setProdutoParaAjuste(p)} className="bg-amber-50 text-amber-700 font-bold py-2.5 rounded-lg text-sm border border-amber-200 active:bg-amber-100 transition">Ajuste</button>
                     <button onClick={() => abrirModalEdicao(p)} className="bg-blue-50 text-blue-700 font-bold py-2.5 rounded-lg text-sm border border-blue-200 active:bg-blue-100 transition">Editar</button>
                     <button onClick={() => setProdutoParaApagar(p.id)} className="bg-red-50 text-red-600 font-bold py-2.5 rounded-lg text-sm border border-red-200 active:bg-red-100 transition">Excluir</button>
@@ -897,6 +958,7 @@ export default function CadastroRevenda({ atendente }: CadastroRevendaProps) {
                       </td>
                       <td className="p-4 font-black text-green-600">{formatarMoeda(p.preco_venda)}</td>
                       <td className="p-4 text-center space-x-2">
+                        {p.modo_estoque === 'producao_lote' && <button onClick={() => setProdutoParaProduzir(p)} className="text-green-700 bg-green-50 hover:bg-green-100 border border-green-100 px-3 py-1.5 rounded-lg font-bold text-xs transition">Produzir</button>}
                         <button onClick={() => setProdutoParaAjuste(p)} className="text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-100 px-3 py-1.5 rounded-lg font-bold text-xs transition">Ajuste</button>
                         <button onClick={() => abrirModalEdicao(p)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-3 py-1.5 rounded-lg font-bold text-xs transition">Editar</button>
                         <button onClick={() => setProdutoParaApagar(p.id)} className="text-red-500 bg-red-50 hover:bg-red-100 border border-red-100 px-3 py-1.5 rounded-lg font-bold text-xs transition">Excluir</button>

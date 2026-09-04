@@ -4,10 +4,11 @@ import { supabase } from '../lib/supabase';
 type Insumo = { id: string; nome: string; unidade_medida: string; preco_total_pago: number; qtd_embalagem: number; fator_correcao: number; preco_custo: number; quantidade_estoque: number; estoque_minimo: number; };
 type ReceitaBase = { id: string; nome: string; rendimento_peso: number; unidade_medida: string; custo_total: number; custo_por_unidade: number; };
 type ReceitaItem = { id: string; receita_base_id: string; insumo_id: string; qtd_usada: number; custo_calculado: number; insumos: { nome: string; unidade_medida: string } };
-type FichaProduto = { id: string; produto_venda_id: string; rendimento_porcoes: number; custo_total: number; preco_sugerido: number; margem_lucro_desejada: number; produtos: { nome: string; preco_venda: number } };
+type ModoEstoque = 'producao_sob_demanda' | 'producao_lote';
+type FichaProduto = { id: string; produto_venda_id: string; rendimento_porcoes: number; custo_total: number; preco_sugerido: number; margem_lucro_desejada: number; produtos: { nome: string; preco_venda: number; modo_estoque: ModoEstoque | 'revenda' } };
 type FichaItem = { id: string; ficha_id: string; insumo_id?: string; receita_base_id?: string; quantidade_utilizada: number; custo_calculado: number; insumos?: { nome: string; unidade_medida: string }; receitas_base?: { nome: string; unidade_medida: string } };
 type Parametros = { imposto_taxa_cartao_pct: number; custos_fixos_pct: number; margem_lucro_alvo_pct: number; };
-type ProdutoPDV = { id: string; nome: string; preco_venda: number; };
+type ProdutoPDV = { id: string; nome: string; preco_venda: number; modo_estoque: string; };
 
 export default function PrecificacaoModulo() {
     const [abaAtiva, setAbaAtiva] = useState<'insumos' | 'bases' | 'fichas' | 'diagnostico'>('insumos');
@@ -27,7 +28,7 @@ export default function PrecificacaoModulo() {
     const [itensBase, setItensBase] = useState<ReceitaItem[]>([]);
     const [novoItemBase, setNovoItemBase] = useState({ insumo_id: '', qtd: '' });
 
-    const [novaFicha, setNovaFicha] = useState({ produto_id: '', rendimento: '1' });
+    const [novaFicha, setNovaFicha] = useState<{ produto_id: string; rendimento: string; modo_estoque: ModoEstoque }>({ produto_id: '', rendimento: '1', modo_estoque: 'producao_sob_demanda' });
     const [fichaSelecionada, setFichaSelecionada] = useState<FichaProduto | null>(null);
     const [itensFicha, setItensFicha] = useState<FichaItem[]>([]);
     const [novoItemFicha, setNovoItemFicha] = useState({ tipo: 'insumo', item_id: '', qtd: '' });
@@ -49,7 +50,7 @@ export default function PrecificacaoModulo() {
             const { data: dProdutos } = await supabase.from('produtos').select('*').order('nome');
             const { data: dInsumos } = await supabase.from('insumos').select('*').order('nome');
             const { data: dBases } = await supabase.from('receitas_base').select('*').order('nome');
-            const { data: dFichas } = await supabase.from('fichas_tecnicas').select('*, produtos!inner(nome, preco_venda)');
+            const { data: dFichas } = await supabase.from('fichas_tecnicas').select('*, produtos!inner(nome, preco_venda, modo_estoque)');
             const { data: dParam } = await supabase.from('parametros_precificacao').select('*').maybeSingle();
 
             if (dProdutos) {
@@ -178,17 +179,29 @@ export default function PrecificacaoModulo() {
             produto_venda_id: novaFicha.produto_id, rendimento_porcoes: Number(novaFicha.rendimento)
         }]);
         if (error) return mostrarMensagem('Erro ao salvar ficha (produto já possui ficha?)', 'erro');
+        const { error: erroModo } = await supabase.from('produtos').update({ modo_estoque: novaFicha.modo_estoque }).eq('id', novaFicha.produto_id);
+        if (erroModo) return mostrarMensagem('Ficha criada, mas não foi possível salvar o modo de estoque.', 'erro');
         mostrarMensagem('Ficha Técnica criada!', 'sucesso');
-        setNovaFicha({ produto_id: '', rendimento: '1' });
+        setNovaFicha({ produto_id: '', rendimento: '1', modo_estoque: 'producao_sob_demanda' });
         carregarDados();
     };
 
     const abrirFicha = async (ficha: FichaProduto) => {
-        const { data: fichaAtualizada, error } = await supabase.from('fichas_tecnicas').select('*, produtos!inner(nome, preco_venda)').eq('id', ficha.id).single();
+        const { data: fichaAtualizada, error } = await supabase.from('fichas_tecnicas').select('*, produtos!inner(nome, preco_venda, modo_estoque)').eq('id', ficha.id).single();
         if (error || !fichaAtualizada) return mostrarMensagem('Não foi possível abrir a ficha técnica.', 'erro');
         setFichaSelecionada(fichaAtualizada as unknown as FichaProduto);
         const { data } = await supabase.from('ficha_ingredientes').select('*, insumos(nome, unidade_medida), receitas_base(nome, unidade_medida)').eq('ficha_id', ficha.id);
         if (data) setItensFicha(data as unknown as FichaItem[]);
+    };
+
+    const salvarModoEstoque = async (modo: ModoEstoque) => {
+        if (!fichaSelecionada) return;
+        const { error } = await supabase.from('produtos').update({ modo_estoque: modo }).eq('id', fichaSelecionada.produto_venda_id);
+        if (error) return mostrarMensagem('Não foi possível atualizar o modo de estoque.', 'erro');
+        const fichaAtualizada = { ...fichaSelecionada, produtos: { ...fichaSelecionada.produtos, modo_estoque: modo } };
+        setFichaSelecionada(fichaAtualizada);
+        setFichas(fichas.map(f => f.id === fichaAtualizada.id ? fichaAtualizada : f));
+        mostrarMensagem(modo === 'producao_lote' ? 'Produto configurado para produção em lote.' : 'Produto configurado para produção sob demanda.', 'sucesso');
     };
 
     const adicionarItemFicha = async () => {
@@ -492,6 +505,13 @@ export default function PrecificacaoModulo() {
                                     <label className="text-[10px] font-bold text-gray-500 uppercase">Rendimento da Receita (Ex: 10 Fatias)</label>
                                     <input type="number" className="w-full p-2.5 border rounded-lg bg-white text-sm font-black outline-none" value={novaFicha.rendimento} onChange={e => setNovaFicha({ ...novaFicha, rendimento: e.target.value })} placeholder="1" />
                                 </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Controle de Estoque</label>
+                                    <select className="w-full p-2.5 border rounded-lg bg-white text-sm font-semibold outline-none" value={novaFicha.modo_estoque} onChange={e => setNovaFicha({ ...novaFicha, modo_estoque: e.target.value as ModoEstoque })}>
+                                        <option value="producao_sob_demanda">Sob demanda — baixa os ingredientes ao vender</option>
+                                        <option value="producao_lote">Produção em lote — produz antes e controla produto pronto</option>
+                                    </select>
+                                </div>
                                 <button onClick={salvarFicha} className="w-full bg-cafe-primary text-white font-black uppercase tracking-wider py-3 rounded-xl shadow-md text-xs mt-2 transition active:scale-95">Abrir Ficha</button>
                             </div>
                         </div>
@@ -526,6 +546,10 @@ export default function PrecificacaoModulo() {
                                     <div>
                                         <h3 className="font-black text-lg text-amber-400">{fichaSelecionada.produtos.nome}</h3>
                                         <span className="text-xs text-gray-400 font-medium block mt-0.5">Preço Atual: {formatarMoeda(fichaSelecionada.produtos.preco_venda)} | Rendimento: {fichaSelecionada.rendimento_porcoes} porções</span>
+                                        <select className="mt-2 p-1.5 rounded bg-gray-800 border border-gray-600 text-xs font-semibold text-white outline-none" value={fichaSelecionada.produtos.modo_estoque} onChange={e => salvarModoEstoque(e.target.value as ModoEstoque)}>
+                                            <option value="producao_sob_demanda">Sob demanda: baixa ingredientes na venda</option>
+                                            <option value="producao_lote">Produção em lote: controla produto pronto</option>
+                                        </select>
                                     </div>
                                     <div className="text-right">
                                         <span className="block text-[10px] uppercase tracking-widest text-gray-400">Custo Total Receita</span>

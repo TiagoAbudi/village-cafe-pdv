@@ -78,7 +78,7 @@ export default function GestaoComandas({ atendente }: GestaoComandasProps) {
         const fichasIds = new Set(fichas?.map(f => f.produto_venda_id) || []);
 
         if (prodData) {
-            setProdutos(prodData.map(p => ({ ...p, is_receita: fichasIds.has(p.id) })));
+            setProdutos(prodData.map(p => ({ ...p, is_receita: fichasIds.has(p.id) && p.modo_estoque !== 'producao_lote' })));
         }
 
         if (!silencioso) setCarregando(false);

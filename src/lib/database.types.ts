@@ -613,6 +613,7 @@ export type Database = {
           preco_venda: number | null
           qtd_embalagem: number | null
           quantidade_estoque: number | null
+          modo_estoque: string
           tamanho: number | null
           tipo: string
           unidade_medida: string | null
@@ -628,6 +629,7 @@ export type Database = {
           preco_venda?: number | null
           qtd_embalagem?: number | null
           quantidade_estoque?: number | null
+          modo_estoque?: string
           tamanho?: number | null
           tipo: string
           unidade_medida?: string | null
@@ -643,6 +645,7 @@ export type Database = {
           preco_venda?: number | null
           qtd_embalagem?: number | null
           quantidade_estoque?: number | null
+          modo_estoque?: string
           tamanho?: number | null
           tipo?: string
           unidade_medida?: string | null

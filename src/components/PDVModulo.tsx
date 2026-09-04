@@ -58,7 +58,8 @@ export default function PDVModulo({ atendente }: PDVModuloProps) {
 
     if (produtosData) {
       setProdutos(produtosData.map(p => ({
-        id: p.id, nome: p.nome, preco_venda: p.preco_venda, preco_custo: p.preco_custo || 0, quantidade_estoque: p.quantidade_estoque || 0, is_receita: fichasIds.has(p.id)
+        id: p.id, nome: p.nome, preco_venda: p.preco_venda, preco_custo: p.preco_custo || 0, quantidade_estoque: p.quantidade_estoque || 0,
+        is_receita: fichasIds.has(p.id) && p.modo_estoque !== 'producao_lote'
       })));
     }
   };
